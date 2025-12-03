@@ -18,7 +18,7 @@ async function main() {
   anchor.setProvider(provider);
 
   // Load IDL
-  const idl = JSON.parse(fs.readFileSync("./target/idl/voting_app.json", "utf8"));
+  const idl = JSON.parse(fs.readFileSync("./target/idl/pulsar_dao.json", "utf8"));
   const programId = new PublicKey(idl.address);
   const program = new anchor.Program(idl, provider);
 

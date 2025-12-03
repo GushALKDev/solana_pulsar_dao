@@ -7,7 +7,7 @@ const POLL_SEED: &[u8] = b"poll";
 const VOTER_SEED: &[u8] = b"voter";
 
 #[program]
-pub mod voting_app {
+pub mod pulsar_dao {
     use super::*;
 
     // Initialize the global account

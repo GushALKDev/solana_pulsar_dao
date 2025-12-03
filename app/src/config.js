@@ -9,7 +9,7 @@ const devnet = 'https://api.devnet.solana.com';
 export const connection = new Connection(devnet);
 
 // Import the IDL
-export const idl = require('./idl/voting_app.json');
+export const idl = require('./idl/pulsar_dao.json');
 
 // Program ID for your Solana program
 export const programId = new PublicKey(idl.address);

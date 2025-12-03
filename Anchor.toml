@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-voting_app = "GfEPn9ygokVBRpiVQU8CGDnVJwtiksE9SBc3rEBMZiJD"
+pulsar_dao = "GfEPn9ygokVBRpiVQU8CGDnVJwtiksE9SBc3rEBMZiJD"
 
 [registry]
 url = "https://api.apr.dev"

@@ -3,7 +3,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { BN } from "bn.js";
 const { SystemProgram } = anchor.web3;
 
-describe("voting_app", () => {
+describe("pulsar_dao", () => {
   /* Configure the client */
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);

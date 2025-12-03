@@ -22,6 +22,58 @@ import {
   globalAccountPDAAddress,
 } from '../config';
 
+/**
+ * Component to display time remaining for a poll
+ */
+const TimeRemaining = ({ deadline }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    if (!deadline || deadline === 0) {
+      setTimeLeft('No deadline');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const remaining = deadline - now;
+
+      if (remaining <= 0) {
+        setTimeLeft('Expired');
+      } else {
+        const days = Math.floor(remaining / 86400);
+        const hours = Math.floor((remaining % 86400) / 3600);
+        const minutes = Math.floor((remaining % 3600) / 60);
+        
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hours}h`);
+        } else if (hours > 0) {
+          setTimeLeft(`${hours}h ${minutes}m`);
+        } else {
+          setTimeLeft(`${minutes}m`);
+        }
+      }
+    };
+
+    updateTimer();
+    const timerInterval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [deadline]);
+
+  return (
+    <Typography 
+      variant="body2" 
+      sx={{ 
+        color: timeLeft === 'Expired' ? 'error.main' : 'text.secondary',
+        fontWeight: timeLeft === 'Expired' ? 'bold' : 'normal'
+      }}
+    >
+      {timeLeft === 'Expired' ? '🔴 Expired' : `⏱️ ${timeLeft}`}
+    </Typography>
+  );
+};
+
 const Home = () => {
   const [polls, setPolls] = useState([]); // Holds the list of polls
   const [loading, setLoading] = useState(false); // Indicates loading state
@@ -73,6 +125,7 @@ const Home = () => {
               number: counter,
               question: pollAccount.question.toString(),
               totalVotes: Number(pollAccount.yes.toString()) + Number(pollAccount.no.toString()),
+              deadline: Number(pollAccount.deadline.toString()),
               pda: pollPDAAddress.toBase58(),
             };
             foundPolls.push(pollData);
@@ -173,6 +226,7 @@ const Home = () => {
                     <Typography variant="body2" color="text.secondary">
                       Total Votes: {poll.totalVotes}
                     </Typography>
+                    <TimeRemaining deadline={poll.deadline} />
                   </CardContent>
                   <CardActions>
                     <Link to={`/poll/${poll.pda}`} style={{ textDecoration: 'none' }}>

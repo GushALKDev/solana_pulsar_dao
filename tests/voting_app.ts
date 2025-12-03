@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import * as anchor from "@coral-xyz/anchor";
+import { BN } from "bn.js";
 const { SystemProgram } = anchor.web3;
 
 describe("voting_app", () => {
@@ -86,7 +87,7 @@ describe("voting_app", () => {
     const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
     
     await program.methods
-    .createPoll("Do you like the first poll?")
+    .createPoll("Do you like the first poll?", new BN(60 * 60 * 24)) // 24 hours
     .accounts({
       globalAccount: globalPDAAddress,
       user: wallet1.publicKey.toString(),
@@ -118,7 +119,7 @@ describe("voting_app", () => {
     const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
 
     await program.methods
-      .createPoll("Do you like the second poll?")
+      .createPoll("Do you like the second poll?", new BN(60 * 60 * 24)) // 24 hours
       .accounts({
         globalAccount: globalPDAAddress,
         user: wallet2.publicKey.toString(),
@@ -402,6 +403,59 @@ describe("voting_app", () => {
     expect(voterPDA.voted).to.be.true;
     expect(voterPDA.vote).to.be.true; // The vote should match what was cast
   });
+
+  it("User 1 tries to vote on an expired poll", async () => {
+    console.log("User 1 tries to vote on an expired poll");
+
+    const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
+
+    // Create a poll with 1 second duration
+    await program.methods
+      .createPoll("Expired Poll?", new BN(1)) 
+      .accounts({
+        globalAccount: globalPDAAddress,
+        user: wallet1.publicKey.toString(),
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([wallet1])
+      .rpc();
+
+    const pollNumber = Number(globalPDA.pollsCounter);
+    console.log("Poll %s has been created (short duration).", pollNumber);
+
+    // Wait for 2 seconds
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
+      program.programId
+    );
+
+    // Find or derive the VoterAccount PDA
+    const [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("voter"), pollPDAAddress.toBuffer(), wallet1.publicKey.toBuffer()],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .vote(true)
+        .accounts({
+          pollAccount: pollPDAAddress,
+          voterAccount: voterPDAAddress,
+          user: wallet1.publicKey.toString(),
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([wallet1])
+        .rpc();
+      
+      // If we get here, it failed
+      expect.fail("Vote should have failed due to expiration");
+    } catch (error: any) {
+      expect(error.message).to.contain("PollExpired"); // Or whatever the error code message is
+    }
+  });
+
   
 });
 

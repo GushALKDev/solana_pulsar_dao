@@ -15,9 +15,12 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { SystemProgram } from '@solana/web3.js';
 import { connection, program, globalAccountPDAAddress } from '../config';
 
+import { BN } from 'bn.js';
+
 const CreatePoll = () => {
   const { publicKey, sendTransaction } = useWallet(); // Access the user's wallet and transaction methods
   const [pollQuestion, setPollQuestion] = useState(''); // State to store the poll question
+  const [duration, setDuration] = useState(10); // State to store the poll duration in minutes
   const [loading, setLoading] = useState(false); // State to indicate loading during transaction
   const [errorMessage, setErrorMessage] = useState(''); // State to store error messages
   const navigate = useNavigate(); // React Router hook for navigation
@@ -41,7 +44,7 @@ const CreatePoll = () => {
 
       // Prepare and send the transaction
       const transaction = await votingProgram.methods
-        .createPoll(pollQuestion) // Pass the poll question as an argument
+        .createPoll(pollQuestion, new BN(duration * 60)) // Pass the poll question and duration (in seconds)
         .accounts({
           globalAccount: globalAccountPDAAddress, // Specify the global account PDA
           user: publicKey, // Specify the user's public key
@@ -104,13 +107,25 @@ const CreatePoll = () => {
               sx={{ marginBottom: 2 }}
             />
 
+            {/* Input field for the poll duration */}
+            <TextField
+              label="Duration (in minutes)"
+              variant="outlined"
+              fullWidth
+              type="number"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              disabled={loading}
+              sx={{ marginBottom: 2 }}
+            />
+
             {/* Button to create a new poll */}
             <Button
               variant="contained"
               color="primary"
               fullWidth
-              onClick={createNewPoll} // Trigger the createNewPoll function
-              disabled={loading} // Disable button while loading
+              onClick={createNewPoll}
+              disabled={loading}
               sx={{ marginBottom: 2 }}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Poll'}

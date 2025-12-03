@@ -27,6 +27,8 @@ const Poll = () => {
   const [pollQuestion, setPollQuestion] = useState(''); // Stores poll question
   const [pollYes, setPollYes] = useState(0); // Stores "Yes" votes count
   const [pollNo, setPollNo] = useState(0); // Stores "No" votes count
+  const [pollDeadline, setPollDeadline] = useState(0); // Stores poll deadline timestamp
+  const [timeLeft, setTimeLeft] = useState(''); // Stores formatted time left
   const [voterAccount, setVoterAccount] = useState(null); // Tracks user's voter account
   const { pollPDAAddress } = useParams(); // Gets the poll PDA from URL parameters
 
@@ -44,6 +46,7 @@ const Poll = () => {
       setPollQuestion(pollPDA.question.toString());
       setPollYes(Number(pollPDA.yes.toString()));
       setPollNo(Number(pollPDA.no.toString()));
+      setPollDeadline(Number(pollPDA.deadline.toString()));
     } catch (error) {
       console.error('Error in fetchPollInfo:', error);
     }
@@ -140,6 +143,32 @@ const Poll = () => {
     return () => clearInterval(interval); // Cleanup interval on component unmount
   }, [publicKey, pollPDAAddress]);
 
+  /**
+   * Countdown timer logic.
+   */
+  useEffect(() => {
+    if (!pollDeadline) return;
+
+    const updateTimer = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const remaining = pollDeadline - now;
+
+      if (remaining <= 0) {
+        setTimeLeft('Expired');
+      } else {
+        const hours = Math.floor(remaining / 3600);
+        const minutes = Math.floor((remaining % 3600) / 60);
+        const seconds = remaining % 60;
+        setTimeLeft(`${hours}h ${minutes}m ${seconds}s`);
+      }
+    };
+
+    updateTimer(); // Initial call
+    const timerInterval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [pollDeadline]);
+
   return (
     <>
       {/* Header with poll number and wallet connection button */}
@@ -171,6 +200,9 @@ const Poll = () => {
               <Typography variant="body2" sx={{ marginTop: 1 }}>
                 No: {pollNo} votes
               </Typography>
+              <Typography variant="h6" sx={{ marginTop: 2, color: timeLeft === 'Expired' ? 'red' : 'primary.main' }}>
+                {timeLeft === 'Expired' ? 'Poll Expired' : `Time Remaining: ${timeLeft}`}
+              </Typography>
             </CardContent>
             <CardActions>
               {confirming ? (
@@ -186,7 +218,7 @@ const Poll = () => {
                     variant="contained"
                     color="success"
                     onClick={() => vote(true)}
-                    disabled={!publicKey || confirming}
+                    disabled={!publicKey || confirming || timeLeft === 'Expired'}
                   >
                     Vote Yes
                   </Button>
@@ -194,7 +226,7 @@ const Poll = () => {
                     variant="contained"
                     color="error"
                     onClick={() => vote(false)}
-                    disabled={!publicKey || confirming}
+                    disabled={!publicKey || confirming || timeLeft === 'Expired'}
                   >
                     Vote No
                   </Button>

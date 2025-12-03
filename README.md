@@ -17,7 +17,8 @@ This project is a decentralized voting application built on Solana using the Anc
 ## Features
 
 - **Global State Management**: Centralized state with a global poll counter for unique identification.
-- **Poll Creation**: Users can create polls with a custom question.
+- **Poll Creation**: Users can create polls with a custom question and duration.
+- **Poll Expiry**: Polls automatically expire after the set duration, preventing further voting.
 - **Secure Voting**: Each voter can cast their vote only once per poll, enforced by PDAs.
 - **On-Chain Logic**: All interactions are managed on-chain for transparency and integrity.
 - **Responsive Frontend**: Modern UI built with Material UI for seamless interaction with the program.
@@ -28,8 +29,8 @@ This project is a decentralized voting application built on Solana using the Anc
 
 ### 1. Frontend (React, Material UI)
 The frontend allows users to interact with the Solana Voting App through an intuitive web interface:
-- **Create Poll**: Users can create a poll by entering a custom question.
-- **View Poll**: Displays poll details, including the question, vote counts, and user status (e.g., already voted).
+- **Create Poll**: Users can create a poll by entering a custom question and duration (in minutes).
+- **View Poll**: Displays poll details, including the question, vote counts, user status, and a countdown timer.
 - **Cast Vote**: Allows users to vote "Yes" or "No" with a real-time confirmation spinner during transaction processing.
 
 #### Key Screens
@@ -41,8 +42,8 @@ The frontend allows users to interact with the Solana Voting App through an intu
 
 The program, written in Rust, resides in `lib.rs` and implements the following core functionalities:
 - **Initialization (`initialize`)**: Sets up the global account with a poll counter.
-- **Poll Creation (`create_poll`)**: Allows users to create polls, ensuring valid question lengths and proper initialization.
-- **Voting (`vote`)**: Handles vote casting, updates poll results, and ensures single-vote-per-user logic.
+- **Poll Creation (`create_poll`)**: Allows users to create polls, ensuring valid question lengths and proper initialization with a deadline.
+- **Voting (`vote`)**: Handles vote casting, updates poll results, ensures single-vote-per-user logic, and checks for poll expiration.
 
 #### Defined Accounts
 1. **GlobalAccount**: Holds the global state, including the poll counter.
@@ -64,6 +65,7 @@ The file `voting_app.ts` contains scripts for interacting with the program and c
 ### 4. Error Codes
 - **AlreadyVoted**: Prevents duplicate voting.
 - **QuestionTooLong**: Ensures the poll question does not exceed 200 characters.
+- **PollExpired**: Prevents voting on polls that have passed their deadline.
 
 ## Requirements
 
@@ -117,6 +119,64 @@ The file `voting_app.ts` contains scripts for interacting with the program and c
 - **Optimized Space Usage**: Each account is allocated only the necessary space to minimize costs.
 - **Test Coverage**: Includes scenarios for normal operations and edge cases, like handling duplicate voting attempts.
 - **Error Logging**: Errors are captured with meaningful messages to improve debugging and user experience.
+
+## Deployment
+
+### Deploy to Devnet
+
+1. **Configure Solana CLI for Devnet:**
+   ```bash
+   solana config set --url devnet
+   ```
+
+2. **Ensure you have SOL for deployment:**
+   ```bash
+   solana balance
+   # If needed, request airdrop (max 5 SOL per request)
+   solana airdrop 2
+   ```
+
+3. **Build and deploy the program:**
+   ```bash
+   anchor build
+   anchor deploy
+   ```
+
+4. **Initialize the global account:**
+   ```bash
+   ANCHOR_WALLET=~/.config/solana/id.json node scripts/initialize.js devnet
+   ```
+
+5. **Update the frontend IDL:**
+   ```bash
+   cp target/idl/voting_app.json app/src/idl/voting_app.json
+   ```
+
+### Deploy to Localnet
+
+1. **Start local validator:**
+   ```bash
+   # On macOS
+   rm -rf test-ledger
+   COPYFILE_DISABLE=1 solana-test-validator
+   ```
+
+2. **In a new terminal, deploy:**
+   ```bash
+   solana config set --url localhost
+   anchor build
+   anchor deploy
+   ```
+
+3. **Initialize the global account:**
+   ```bash
+   ANCHOR_WALLET=~/.config/solana/id.json node scripts/initialize.js localnet
+   ```
+
+4. **Update the frontend IDL:**
+   ```bash
+   cp target/idl/voting_app.json app/src/idl/voting_app.json
+   ```
 
 ## Future Improvements
 

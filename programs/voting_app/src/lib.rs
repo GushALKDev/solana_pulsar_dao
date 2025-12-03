@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("8WxMscTKPfCZo5735pFz3iRWQFQRQ52VnrZ4uDeCsw1f");
+declare_id!("33Kx3RXPm7VFqrN92wYCGhpkdB44kQNqRWEkf3GzQEQi");
 
 const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
 const POLL_SEED: &[u8] = b"poll";
@@ -18,7 +18,7 @@ pub mod voting_app {
     }
 
     // Create a new poll
-    pub fn create_poll(ctx: Context<CreatePoll>, question: String) -> Result<()> {
+    pub fn create_poll(ctx: Context<CreatePoll>, question: String, duration: i64) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
         let poll_account = &mut ctx.accounts.poll_account;
         let user = &ctx.accounts.user;
@@ -34,6 +34,10 @@ pub mod voting_app {
         poll_account.author = user.key();
         poll_account.yes = 0;
         poll_account.no = 0;
+        
+        // Calculate deadline
+        let clock = Clock::get()?;
+        poll_account.deadline = clock.unix_timestamp + duration;
           
         // Increment the global poll counter
         global_account.polls_counter += 1;
@@ -50,6 +54,12 @@ pub mod voting_app {
     pub fn vote(ctx: Context<Vote>, vote: bool) -> Result<()> {
         let poll_account = &mut ctx.accounts.poll_account;
         let voter_account = &mut ctx.accounts.voter_account;
+
+        // Check if poll is expired
+        let clock = Clock::get()?;
+        if clock.unix_timestamp > poll_account.deadline {
+            return Err(ErrorCode::PollExpired.into());
+        }
 
         // If the user already voted in this poll, the program
         // will thrown an "account Address already in use" error
@@ -77,6 +87,7 @@ pub struct Initialize<'info> {
     #[account(
         init, 
         payer = user, 
+        // 8 (discriminator) + 8 (polls_counter) + 1 (bump)
         space = 8 + 8 + 1, 
         seeds = [GLOBAL_ACCOUNT_SEED], 
         bump
@@ -95,7 +106,8 @@ pub struct CreatePoll<'info> {
     #[account(
         init, 
         payer = user, 
-        space = 8 + 8 + (4 + 200) + 32 + 8 + 8 + 1, 
+        // 8 (discriminator) + 8 (number) + (4 + 200) (question) + 32 (author) + 8 (yes) + 8 (no) + 8 (deadline) + 1 (bump)
+        space = 8 + 8 + (4 + 200) + 32 + 8 + 8 + 8 + 1, 
         seeds = [POLL_SEED, &global_account.polls_counter.to_le_bytes()], 
         bump
     )]
@@ -113,6 +125,7 @@ pub struct Vote<'info> {
     #[account(
         init, 
         payer = user, 
+        // 8 (discriminator) + 32 (poll) + 32 (voter) + 1 (vote) + 1 (bump)
         space = 8 + 32 + 32 + 1 + 1, 
         seeds = [VOTER_SEED, poll_account.key().as_ref(), user.key().as_ref()], 
         bump
@@ -131,6 +144,7 @@ pub struct PollAccount {
     pub author: Pubkey,   // Author of the poll
     pub yes: u64,         // Count of "yes" votes
     pub no: u64,          // Count of "no" votes
+    pub deadline: i64,    // Unix timestamp for when the poll closes
 }
 
 // Voter account structure
@@ -160,4 +174,6 @@ pub enum ErrorCode {
     AlreadyVoted,
     #[msg("The question exceeds the maximum length of 200 characters.")]
     QuestionTooLong,
+    #[msg("The poll has expired.")]
+    PollExpired,
 }

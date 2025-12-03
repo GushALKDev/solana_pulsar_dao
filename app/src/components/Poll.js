@@ -127,6 +127,7 @@ const Poll = () => {
     };
 
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicKey, pollPDAAddress]);
 
   /**
@@ -141,6 +142,7 @@ const Poll = () => {
     }, 30000);
 
     return () => clearInterval(interval); // Cleanup interval on component unmount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicKey, pollPDAAddress]);
 
   /**

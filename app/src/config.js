@@ -1,10 +1,10 @@
 // src/config.js
 
 import { Connection, PublicKey } from '@solana/web3.js';
-import { IdlAccounts, AnchorProvider, Program } from "@coral-xyz/anchor";
+import { AnchorProvider, Program } from "@coral-xyz/anchor";
 
 // Solana network endpoint (Devnet in this case)
-const localhost = 'http://127.0.0.1:8899';
+// const localhost = 'http://127.0.0.1:8899';
 const devnet = 'https://api.devnet.solana.com';
 export const connection = new Connection(devnet);
 

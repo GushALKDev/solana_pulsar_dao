@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("33Kx3RXPm7VFqrN92wYCGhpkdB44kQNqRWEkf3GzQEQi");
+declare_id!("4LUhz8RvrWVm9YtVepsaGYEF6tdZofUjBY7hicBd5Xw4");
 
 const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
 const POLL_SEED: &[u8] = b"poll";
@@ -14,6 +14,8 @@ pub mod voting_app {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
         global_account.polls_counter = 1;
+        global_account.admin = ctx.accounts.user.key();
+        global_account.vote_updates_enabled = true;
         Ok(())
     }
 
@@ -79,6 +81,57 @@ pub mod voting_app {
 
         Ok(())
     }
+
+    // Update vote on a poll
+    pub fn update_vote(ctx: Context<UpdateVote>, vote: bool) -> Result<()> {
+        let global_account = &ctx.accounts.global_account;
+        
+        // Check if vote updates are enabled
+        if !global_account.vote_updates_enabled {
+            return Err(ErrorCode::VoteUpdatesDisabled.into());
+        }
+
+        let poll_account = &mut ctx.accounts.poll_account;
+        let voter_account = &mut ctx.accounts.voter_account;
+
+        // Check if poll is expired
+        let clock = Clock::get()?;
+        if clock.unix_timestamp > poll_account.deadline {
+            return Err(ErrorCode::PollExpired.into());
+        }
+
+        // Check if the new vote is different from the old vote
+        if voter_account.vote == vote {
+            return Ok(());
+        }
+
+        // Update the poll results
+        if vote {
+            poll_account.yes += 1;
+            poll_account.no -= 1;
+        } else {
+            poll_account.yes -= 1;
+            poll_account.no += 1;
+        }
+
+        // Update voter account fields
+        voter_account.vote = vote;
+
+        Ok(())
+    }
+
+    // Toggle vote updates (Admin only)
+    pub fn toggle_vote_updates(ctx: Context<ToggleVoteUpdates>) -> Result<()> {
+        let global_account = &mut ctx.accounts.global_account;
+        
+        // Check if the user is the admin
+        if ctx.accounts.user.key() != global_account.admin {
+            return Err(ErrorCode::Unauthorized.into());
+        }
+
+        global_account.vote_updates_enabled = !global_account.vote_updates_enabled;
+        Ok(())
+    }
 }
 
 // Context for initializing the global account
@@ -87,8 +140,8 @@ pub struct Initialize<'info> {
     #[account(
         init, 
         payer = user, 
-        // 8 (discriminator) + 8 (polls_counter) + 1 (bump)
-        space = 8 + 8 + 1, 
+        // 8 (discriminator) + 8 (polls_counter) + 32 (admin) + 1 (vote_updates_enabled) + 1 (bump)
+        space = 8 + 8 + 32 + 1 + 1, 
         seeds = [GLOBAL_ACCOUNT_SEED], 
         bump
     )]
@@ -136,6 +189,32 @@ pub struct Vote<'info> {
     pub system_program: Program<'info, System>,
 }
 
+// Context for updating a vote
+#[derive(Accounts)]
+pub struct UpdateVote<'info> {
+    #[account(mut)]
+    pub global_account: Account<'info, GlobalAccount>,
+    #[account(mut)]
+    pub poll_account: Account<'info, PollAccount>,
+    #[account(
+        mut,
+        seeds = [VOTER_SEED, poll_account.key().as_ref(), user.key().as_ref()], 
+        bump
+    )]
+    pub voter_account: Account<'info, VoterAccount>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+// Context for toggling vote updates
+#[derive(Accounts)]
+pub struct ToggleVoteUpdates<'info> {
+    #[account(mut)]
+    pub global_account: Account<'info, GlobalAccount>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
 // Poll account structure
 #[account]
 pub struct PollAccount {
@@ -160,6 +239,8 @@ pub struct VoterAccount {
 #[account]
 pub struct GlobalAccount {
     pub polls_counter: u64, // Counter for polls
+    pub admin: Pubkey,      // Admin public key
+    pub vote_updates_enabled: bool, // Global flag to enable/disable vote updates
 }
 
 #[event]
@@ -176,4 +257,8 @@ pub enum ErrorCode {
     QuestionTooLong,
     #[msg("The poll has expired.")]
     PollExpired,
+    #[msg("Vote updates are disabled.")]
+    VoteUpdatesDisabled,
+    #[msg("Unauthorized.")]
+    Unauthorized,
 }

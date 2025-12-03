@@ -14,12 +14,15 @@ import {
   Button,
   CircularProgress,
   Grid,
+  Chip,
+  Box,
 } from '@mui/material';
 import {
   program,
   programId,
   pollSeed,
   globalAccountPDAAddress,
+  connection,
 } from '../config';
 
 /**
@@ -78,24 +81,59 @@ const Home = () => {
   const [polls, setPolls] = useState([]); // Holds the list of polls
   const [loading, setLoading] = useState(false); // Indicates loading state
   const [pollsCounter, setPollsCounter] = useState(0); // Stores the current number of polls
-  const { connected } = useWallet(); // Wallet connection state
+  const [admin, setAdmin] = useState(null); // Stores the admin public key
+  const [voteUpdatesEnabled, setVoteUpdatesEnabled] = useState(false); // Stores the global vote update setting
+  const [togglingVoteUpdates, setTogglingVoteUpdates] = useState(false); // Loading state for toggle
+  const { connected, publicKey, sendTransaction } = useWallet(); // Wallet connection state
 
   /**
-   * Fetch the global polls_counter from the program.
-   * Updates only if the counter value has changed.
+   * Fetch the global polls_counter and admin settings from the program.
    */
-  const fetchPollsCounter = async () => {
+  const fetchGlobalAccount = async () => {
     try {
       const votingProgram = program({ publicKey: null });
       const globalAccountPDA = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
+      
       const fetchedCounter = Number(globalAccountPDA.pollsCounter.toString());
-
       // Update pollsCounter only if it has changed
       if (fetchedCounter !== pollsCounter) {
         setPollsCounter(fetchedCounter);
       }
+
+      setAdmin(globalAccountPDA.admin.toString());
+      setVoteUpdatesEnabled(globalAccountPDA.voteUpdatesEnabled);
+
     } catch (error) {
-      console.error('Error fetching polls_counter:', error);
+      console.error('Error fetching global account:', error);
+    }
+  };
+
+  /**
+   * Toggles the vote updates setting. Only available to the admin.
+   */
+  const toggleVoteUpdates = async () => {
+    if (!publicKey) return;
+
+    setTogglingVoteUpdates(true);
+    try {
+        const votingProgram = program({ publicKey });
+        const transaction = await votingProgram.methods
+            .toggleVoteUpdates()
+            .accounts({
+                globalAccount: globalAccountPDAAddress,
+                user: publicKey,
+            })
+            .transaction();
+        
+        const signature = await sendTransaction(transaction, connection);
+        await connection.confirmTransaction(signature, 'finalized');
+        
+        // Refresh global account data
+        await fetchGlobalAccount();
+    } catch (error) {
+        console.error("Error toggling vote updates:", error);
+    } finally {
+        setTogglingVoteUpdates(false);
     }
   };
 
@@ -155,12 +193,12 @@ const Home = () => {
 
   /**
    * Initial data fetch and periodic updates every 30 seconds.
-   * Calls fetchPollsCounter and fetchPolls only if changes are detected.
+   * Calls fetchGlobalAccount and fetchPolls only if changes are detected.
    */
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      await fetchPollsCounter();
+      await fetchGlobalAccount();
       await fetchPolls();
       setLoading(false);
     };
@@ -168,7 +206,7 @@ const Home = () => {
     fetchData();
 
     const interval = setInterval(async () => {
-      await fetchPollsCounter(); // Fetch counter first to determine if polls have changed
+      await fetchGlobalAccount(); // Fetch counter and settings
       await fetchPolls(); // Fetch updated polls if counter changes
     }, 30000);
 
@@ -190,6 +228,39 @@ const Home = () => {
 
       {/* Main Content */}
       <Container sx={{ marginTop: 4 }}>
+        
+        {/* Admin Controls */}
+        {connected && publicKey && admin && publicKey.toString() === admin && (
+            <Box sx={{ mb: 4, p: 2, border: '1px solid #ccc', borderRadius: 2 }}>
+                <Typography variant="h6" gutterBottom>Admin Controls</Typography>
+                <Grid container alignItems="center" spacing={2}>
+                    <Grid item>
+                        <Typography variant="body1">
+                            Vote Updates: 
+                            {togglingVoteUpdates ? (
+                                <CircularProgress size={20} sx={{ ml: 1 }} />
+                            ) : (
+                                <Chip 
+                                    label={voteUpdatesEnabled ? "Enabled" : "Disabled"} 
+                                    color={voteUpdatesEnabled ? "success" : "error"} 
+                                    sx={{ ml: 1 }}
+                                />
+                            )}
+                        </Typography>
+                    </Grid>
+                    <Grid item>
+                        <Button 
+                            variant="contained" 
+                            onClick={toggleVoteUpdates}
+                            disabled={togglingVoteUpdates}
+                        >
+                            {voteUpdatesEnabled ? "Disable Updates" : "Enable Updates"}
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Box>
+        )}
+
         {/* Button to create a new poll (visible if connected) */}
         {connected && (
           <Link to="/create-poll" style={{ textDecoration: 'none' }}>

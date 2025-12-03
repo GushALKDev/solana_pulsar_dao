@@ -1,5 +1,5 @@
 {
-  "address": "33Kx3RXPm7VFqrN92wYCGhpkdB44kQNqRWEkf3GzQEQi",
+  "address": "4LUhz8RvrWVm9YtVepsaGYEF6tdZofUjBY7hicBd5Xw4",
   "metadata": {
     "name": "voting_app",
     "version": "0.1.0",
@@ -118,6 +118,91 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "toggle_vote_updates",
+      "discriminator": [
+        125,
+        70,
+        220,
+        6,
+        186,
+        80,
+        228,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_vote",
+      "discriminator": [
+        95,
+        223,
+        212,
+        112,
+        234,
+        242,
+        37,
+        229
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "poll_account",
+          "writable": true
+        },
+        {
+          "name": "voter_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "poll_account"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "vote",
+          "type": "bool"
+        }
+      ]
     },
     {
       "name": "vote",
@@ -251,6 +336,16 @@
       "code": 6002,
       "name": "PollExpired",
       "msg": "The poll has expired."
+    },
+    {
+      "code": 6003,
+      "name": "VoteUpdatesDisabled",
+      "msg": "Vote updates are disabled."
+    },
+    {
+      "code": 6004,
+      "name": "Unauthorized",
+      "msg": "Unauthorized."
     }
   ],
   "types": [
@@ -262,6 +357,14 @@
           {
             "name": "polls_counter",
             "type": "u64"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "vote_updates_enabled",
+            "type": "bool"
           }
         ]
       }

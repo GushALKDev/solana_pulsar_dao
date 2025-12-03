@@ -20,10 +20,13 @@ This project is a decentralized voting application built on Solana using the Anc
 - **Poll Creation**: Users can create polls with a custom question and duration.
 - **Poll Expiry**: Polls automatically expire after the set duration, preventing further voting.
 - **Secure Voting**: Each voter can cast their vote only once per poll, enforced by PDAs.
+- **🆕 Vote Updates**: Voters can change their vote before the poll expires (if enabled by admin).
+- **🆕 Admin Controls**: The deployer can enable/disable vote updates globally through the UI.
 - **On-Chain Logic**: All interactions are managed on-chain for transparency and integrity.
 - **Responsive Frontend**: Modern UI built with Material UI for seamless interaction with the program.
 - **Error Handling**: Well-defined error codes and validations to enhance robustness.
 - **Reusability**: Designed with scalability and modularity in mind, allowing easy extension.
+
 
 ## Project Structure
 
@@ -32,21 +35,25 @@ The frontend allows users to interact with the Solana Voting App through an intu
 - **Create Poll**: Users can create a poll by entering a custom question and duration (in minutes).
 - **View Poll**: Displays poll details, including the question, vote counts, user status, and a countdown timer.
 - **Cast Vote**: Allows users to vote "Yes" or "No" with a real-time confirmation spinner during transaction processing.
+- **🆕 Change Vote**: If vote updates are enabled, users can change their vote before the poll expires.
+- **🆕 Admin Panel**: The deployer sees an admin control panel to toggle vote updates globally with loading indicators.
 
 #### Key Screens
-1. **Create Poll**: A form to create a new poll, redirecting to the Home page after successful submission.
-2. **Poll Details**: Displays poll information and voting buttons. If the user has already voted, it shows their selection.
-3. **Home**: Lists all available polls, including their questions and total votes.
+1. **Home**: Lists all available polls with their questions and total votes. Shows admin controls if connected as deployer.
+2. **Create Poll**: A form to create a new poll, redirecting to the Home page after successful submission.
+3. **Poll Details**: Displays poll information and voting buttons. Shows "Change to Yes/No" buttons if user has voted and updates are enabled.
 
 ### 2. Program (Rust - Anchor)
 
 The program, written in Rust, resides in `lib.rs` and implements the following core functionalities:
-- **Initialization (`initialize`)**: Sets up the global account with a poll counter.
+- **Initialization (`initialize`)**: Sets up the global account with a poll counter, admin, and vote updates setting.
 - **Poll Creation (`create_poll`)**: Allows users to create polls, ensuring valid question lengths and proper initialization with a deadline.
 - **Voting (`vote`)**: Handles vote casting, updates poll results, ensures single-vote-per-user logic, and checks for poll expiration.
+- **🆕 Update Vote (`update_vote`)**: Allows voters to change their vote if globally enabled and poll hasn't expired.
+- **🆕 Toggle Vote Updates (`toggle_vote_updates`)**: Admin-only function to enable/disable vote updates globally.
 
 #### Defined Accounts
-1. **GlobalAccount**: Holds the global state, including the poll counter.
+1. **GlobalAccount**: Holds the global state, including the poll counter, admin public key, and vote updates enabled flag.
 2. **PollAccount**: Represents a poll with attributes like question, author, and vote counts.
 3. **VoterAccount**: Tracks a user's vote on a specific poll.
 
@@ -62,10 +69,17 @@ The file `voting_app.ts` contains scripts for interacting with the program and c
 - Vote casting and validation.
 - Error scenarios like attempting to vote multiple times.
 
+The file `vote_updates.ts` contains additional tests for the new vote update functionality:
+- Changing votes when updates are enabled.
+- Blocking vote changes when updates are disabled.
+- Admin permission checks for toggling updates.
+
 ### 4. Error Codes
 - **AlreadyVoted**: Prevents duplicate voting.
 - **QuestionTooLong**: Ensures the poll question does not exceed 200 characters.
 - **PollExpired**: Prevents voting on polls that have passed their deadline.
+- **🆕 VoteUpdatesDisabled**: Prevents vote changes when the feature is disabled globally.
+- **🆕 Unauthorized**: Prevents non-admin users from toggling vote updates.
 
 ## Requirements
 
@@ -180,18 +194,21 @@ The file `voting_app.ts` contains scripts for interacting with the program and c
 
 ## Future Improvements
 
-
 1. **Enhanced Voting Options**:
    Extend the voting logic to support more complex poll types, such as multiple-choice or ranked voting.
 
-3. **Poll History**:
+2. **Poll History**:
    Introduce a history feature to keep track of closed polls and their results for archival purposes.
 
 3. **Role-Based Access**:
-   Implement roles for users to create and manage polls with finer-grained access control.
+   Implement additional roles beyond admin for users to create and manage polls with finer-grained access control.
 
 4. **On-Chain Analytics**:
    Aggregate voting data and provide summary statistics directly on-chain.
 
 5. **Localization**:
    Support multi-language questions and messages for global accessibility.
+
+6. **Notifications**:
+   Implement on-chain or off-chain notifications for poll creation, voting, and results.
+

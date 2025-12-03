@@ -14,8 +14,9 @@ import {
   CardContent,
   CardActions,
   Grid,
+  Alert,
 } from '@mui/material';
-import { connection, program, programId, voterSeed } from '../config';
+import { connection, program, programId, voterSeed, globalAccountPDAAddress } from '../config';
 import { SystemProgram } from '@solana/web3.js';
 
 const Poll = () => {
@@ -29,7 +30,8 @@ const Poll = () => {
   const [pollNo, setPollNo] = useState(0); // Stores "No" votes count
   const [pollDeadline, setPollDeadline] = useState(0); // Stores poll deadline timestamp
   const [timeLeft, setTimeLeft] = useState(''); // Stores formatted time left
-  const [voterAccount, setVoterAccount] = useState(null); // Tracks user's voter account
+  const [voterAccount, setVoterAccount] = useState(null); // Tracks user's voter account data
+  const [voteUpdatesEnabled, setVoteUpdatesEnabled] = useState(false); // Tracks if vote updates are enabled
   const { pollPDAAddress } = useParams(); // Gets the poll PDA from URL parameters
 
   /**
@@ -49,6 +51,19 @@ const Poll = () => {
       setPollDeadline(Number(pollPDA.deadline.toString()));
     } catch (error) {
       console.error('Error in fetchPollInfo:', error);
+    }
+  };
+
+  /**
+   * Fetches the global account to check if vote updates are enabled.
+   */
+  const fetchGlobalAccount = async () => {
+    try {
+      const votingProgram = program({ publicKey: null });
+      const globalAccount = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
+      setVoteUpdatesEnabled(globalAccount.voteUpdatesEnabled);
+    } catch (error) {
+      console.error('Error in fetchGlobalAccount:', error);
     }
   };
 
@@ -80,14 +95,36 @@ const Poll = () => {
     try {
       setConfirming(true); // Start spinner during confirmation
       const votingProgram = program({ publicKey }); // Initialize program with user's wallet
-      const transaction = await votingProgram.methods
-        .vote(option) // Specify vote option (true for "Yes", false for "No")
-        .accounts({
-          pollAccount: pollPDAAddress, // Poll account
-          user: publicKey, // User's public key
-          systemProgram: SystemProgram.programId, // System program
-        })
-        .transaction();
+      let transaction;
+
+      if (voterAccount && voterAccount.voted) {
+        // User is updating their vote
+        const pollPDAPublicKey = new PublicKey(pollPDAAddress);
+        const [voterAccountPDAAddress] = await PublicKey.findProgramAddress(
+            [Buffer.from(voterSeed), pollPDAPublicKey.toBuffer(), publicKey.toBuffer()],
+            programId
+        );
+
+        transaction = await votingProgram.methods
+            .updateVote(option)
+            .accounts({
+                globalAccount: globalAccountPDAAddress,
+                pollAccount: pollPDAAddress,
+                voterAccount: voterAccountPDAAddress,
+                user: publicKey,
+            })
+            .transaction();
+      } else {
+        // User is voting for the first time
+        transaction = await votingProgram.methods
+            .vote(option) // Specify vote option (true for "Yes", false for "No")
+            .accounts({
+            pollAccount: pollPDAAddress, // Poll account
+            user: publicKey, // User's public key
+            systemProgram: SystemProgram.programId, // System program
+            })
+            .transaction();
+      }
 
       const transactionSignature = await sendTransaction(transaction, connection);
 
@@ -120,6 +157,7 @@ const Poll = () => {
     const fetchData = async () => {
       setLoading(true); // Start loading spinner
       await fetchPollInfo(); // Fetch poll data
+      await fetchGlobalAccount(); // Fetch global account data
       if (publicKey) {
         await fetchVoterAccount(); // Fetch voter data if wallet is connected
       }
@@ -136,6 +174,7 @@ const Poll = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchPollInfo(); // Update poll data
+      fetchGlobalAccount();
       if (publicKey) {
         fetchVoterAccount(); // Update voter data if wallet is connected
       }
@@ -210,9 +249,34 @@ const Poll = () => {
               {confirming ? (
                 <CircularProgress size={24} /> // Spinner during transaction confirmation
               ) : publicKey && voterAccount?.voted ? (
-                <Typography sx={{ marginLeft: 2, color: 'green' }}>
-                  ✅ You have voted for {voterAccount.vote ? 'Yes' : 'No'}
-                </Typography>
+                <Grid container alignItems="center">
+                    <Typography sx={{ marginLeft: 2, color: 'green', marginRight: 2 }}>
+                    ✅ You have voted for {voterAccount.vote ? 'Yes' : 'No'}
+                    </Typography>
+                    {voteUpdatesEnabled && timeLeft !== 'Expired' && (
+                        <>
+                            <Button
+                                variant="outlined"
+                                color="success"
+                                size="small"
+                                onClick={() => vote(true)}
+                                disabled={voterAccount.vote === true} // Disable if already voted Yes
+                                sx={{ marginRight: 1 }}
+                            >
+                                Change to Yes
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                color="error"
+                                size="small"
+                                onClick={() => vote(false)}
+                                disabled={voterAccount.vote === false} // Disable if already voted No
+                            >
+                                Change to No
+                            </Button>
+                        </>
+                    )}
+                </Grid>
               ) : (
                 // Show voting buttons if not yet voted
                 <>

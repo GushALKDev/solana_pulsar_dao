@@ -21,6 +21,7 @@ This project is a decentralized voting application built on Solana using the Anc
 - **Poll Expiry**: Polls automatically expire after the set duration, preventing further voting.
 - **Secure Voting**: Each voter can cast their vote only once per poll, enforced by PDAs.
 - **🆕 Vote Updates**: Voters can change their vote before the poll expires (if enabled by admin).
+- **🆕 Vote Withdrawal**: Voters can withdraw their vote completely, recovering their rent.
 - **🆕 Admin Controls**: The deployer can enable/disable vote updates globally through the UI.
 - **On-Chain Logic**: All interactions are managed on-chain for transparency and integrity.
 - **Responsive Frontend**: Modern UI built with Material UI for seamless interaction with the program.
@@ -36,6 +37,7 @@ The frontend allows users to interact with the Solana Voting App through an intu
 - **View Poll**: Displays poll details, including the question, vote counts, user status, and a countdown timer.
 - **Cast Vote**: Allows users to vote "Yes" or "No" with a real-time confirmation spinner during transaction processing.
 - **🆕 Change Vote**: If vote updates are enabled, users can change their vote before the poll expires.
+- **🆕 Withdraw Vote**: Users can retract their vote completely, closing their voter account and recovering rent.
 - **🆕 Admin Panel**: The deployer sees an admin control panel to toggle vote updates globally with loading indicators.
 
 #### Key Screens
@@ -50,6 +52,7 @@ The program, written in Rust, resides in `lib.rs` and implements the following c
 - **Poll Creation (`create_poll`)**: Allows users to create polls, ensuring valid question lengths and proper initialization with a deadline.
 - **Voting (`vote`)**: Handles vote casting, updates poll results, ensures single-vote-per-user logic, and checks for poll expiration.
 - **🆕 Update Vote (`update_vote`)**: Allows voters to change their vote if globally enabled and poll hasn't expired.
+- **🆕 Withdraw Vote (`withdraw_vote`)**: Allows voters to withdraw their vote, decrementing counts and closing the voter account.
 - **🆕 Toggle Vote Updates (`toggle_vote_updates`)**: Admin-only function to enable/disable vote updates globally.
 
 #### Defined Accounts

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("4LUhz8RvrWVm9YtVepsaGYEF6tdZofUjBY7hicBd5Xw4");
+declare_id!("GfEPn9ygokVBRpiVQU8CGDnVJwtiksE9SBc3rEBMZiJD");
 
 const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
 const POLL_SEED: &[u8] = b"poll";
@@ -132,6 +132,36 @@ pub mod voting_app {
         global_account.vote_updates_enabled = !global_account.vote_updates_enabled;
         Ok(())
     }
+
+    // Withdraw vote from a poll
+    pub fn withdraw_vote(ctx: Context<WithdrawVote>) -> Result<()> {
+        let global_account = &ctx.accounts.global_account;
+        
+        // Check if vote updates are enabled
+        if !global_account.vote_updates_enabled {
+            return Err(ErrorCode::VoteUpdatesDisabled.into());
+        }
+
+        let poll_account = &mut ctx.accounts.poll_account;
+        let voter_account = &ctx.accounts.voter_account;
+
+        // Check if poll is expired
+        let clock = Clock::get()?;
+        if clock.unix_timestamp > poll_account.deadline {
+            return Err(ErrorCode::PollExpired.into());
+        }
+
+        // Decrease the vote count based on the voter's previous vote
+        if voter_account.vote {
+            poll_account.yes -= 1;
+        } else {
+            poll_account.no -= 1;
+        }
+
+        // The voter account will be closed automatically by Anchor
+        // and the rent will be returned to the user
+        Ok(())
+    }
 }
 
 // Context for initializing the global account
@@ -211,6 +241,24 @@ pub struct UpdateVote<'info> {
 pub struct ToggleVoteUpdates<'info> {
     #[account(mut)]
     pub global_account: Account<'info, GlobalAccount>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+// Context for withdrawing a vote
+#[derive(Accounts)]
+pub struct WithdrawVote<'info> {
+    #[account(mut)]
+    pub global_account: Account<'info, GlobalAccount>,
+    #[account(mut)]
+    pub poll_account: Account<'info, PollAccount>,
+    #[account(
+        mut,
+        close = user,
+        seeds = [VOTER_SEED, poll_account.key().as_ref(), user.key().as_ref()], 
+        bump
+    )]
+    pub voter_account: Account<'info, VoterAccount>,
     #[account(mut)]
     pub user: Signer<'info>,
 }

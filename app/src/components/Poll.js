@@ -151,6 +151,52 @@ const Poll = () => {
   };
 
   /**
+   * Handles withdrawing a vote from a poll.
+   * Closes the voter account and returns rent to the user.
+   */
+  const withdrawVote = async () => {
+    try {
+      setConfirming(true);
+      const votingProgram = program({ publicKey });
+      const pollPDAPublicKey = new PublicKey(pollPDAAddress);
+      const [voterAccountPDAAddress] = await PublicKey.findProgramAddress(
+        [Buffer.from(voterSeed), pollPDAPublicKey.toBuffer(), publicKey.toBuffer()],
+        programId
+      );
+
+      const transaction = await votingProgram.methods
+        .withdrawVote()
+        .accounts({
+          globalAccount: globalAccountPDAAddress,
+          pollAccount: pollPDAAddress,
+          voterAccount: voterAccountPDAAddress,
+          user: publicKey,
+        })
+        .transaction();
+
+      const transactionSignature = await sendTransaction(transaction, connection);
+
+      const latestBlockhash = await connection.getLatestBlockhash();
+      await connection.confirmTransaction(
+        {
+          signature: transactionSignature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        },
+        'finalized'
+      );
+
+      console.log('Vote withdrawn, refreshing data...');
+      await fetchPollInfo();
+      await fetchVoterAccount();
+    } catch (error) {
+      console.error('Error withdrawing vote:', error);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  /**
    * Initial fetch of poll and voter data when the component mounts.
    */
   useEffect(() => {
@@ -271,8 +317,17 @@ const Poll = () => {
                                 size="small"
                                 onClick={() => vote(false)}
                                 disabled={voterAccount.vote === false} // Disable if already voted No
+                                sx={{ marginRight: 1 }}
                             >
                                 Change to No
+                            </Button>
+                            <Button
+                                variant="contained"
+                                color="warning"
+                                size="small"
+                                onClick={withdrawVote}
+                            >
+                                Withdraw Vote
                             </Button>
                         </>
                     )}

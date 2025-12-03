@@ -28,6 +28,8 @@ describe("voting_app", () => {
   console.log("Player 5 Address:",  wallet5.publicKey.toString());
 
   let globalPDAAddress;
+  let poll1Id: number;
+  let poll2Id: number;
 
   before("Before", async () => {
     [globalPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
@@ -36,30 +38,44 @@ describe("voting_app", () => {
     );
 
     if (network === "localhost") {
-      console.log("Funding players accounts...");
-      await provider.connection.requestAirdrop(wallet1.publicKey, 200 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet1.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet2.publicKey, 200 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet2.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet3.publicKey, 200 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet3.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet4.publicKey, 200 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet4.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet5.publicKey, 200 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet5.publicKey.toString()} was airdropped with 200 SOL.`);
-    }
-    if (network === "e") {
-      console.log("Funding players accounts...");
-      await provider.connection.requestAirdrop(wallet1.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet1.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet2.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet2.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet3.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet3.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet4.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet4.publicKey.toString()} was airdropped with 200 SOL.`);
-      await provider.connection.requestAirdrop(wallet5.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL); // Airdrop some SOL
-      console.log(`Solana account ${wallet5.publicKey.toString()} was airdropped with 200 SOL.`);
+      console.log("Funding players accounts via Airdrop...");
+      await provider.connection.requestAirdrop(wallet1.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+      await provider.connection.requestAirdrop(wallet2.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+      await provider.connection.requestAirdrop(wallet3.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+      await provider.connection.requestAirdrop(wallet4.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+      await provider.connection.requestAirdrop(wallet5.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+    } else if (network === "devnet") {
+      console.log("Funding players accounts via Transfer from Owner...");
+      // Transfer 0.1 SOL to each test wallet from the provider wallet
+      const transaction = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: wallet1.publicKey,
+          lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+        }),
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: wallet2.publicKey,
+          lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+        }),
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: wallet3.publicKey,
+          lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+        }),
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: wallet4.publicKey,
+          lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+        }),
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: wallet5.publicKey,
+          lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(transaction);
+      console.log("Transferred 0.1 SOL to each player.");
     }
   });
 
@@ -97,15 +113,13 @@ describe("voting_app", () => {
     .rpc();
 
     console.log("Poll %s has been created.", Number(globalPDA.pollsCounter));
+    poll1Id = Number(globalPDA.pollsCounter);
 
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(globalPDA.pollsCounter.toArray("le", 8))],
       program.programId
     );
     const pollPDA = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("Yes: ", Number(pollPDA.yes));
-    // console.log("No: ", Number(pollPDA.no));
 
     expect(Number(pollPDA.yes)).to.eq(0);
     expect(Number(pollPDA.no)).to.eq(0);
@@ -129,15 +143,13 @@ describe("voting_app", () => {
       .rpc();
 
     console.log("Poll %s has been created.", Number(globalPDA.pollsCounter));
+    poll2Id = Number(globalPDA.pollsCounter);
 
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(globalPDA.pollsCounter.toArray("le", 8))],
       program.programId
     );
     const pollPDA = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("Yes: ", Number(pollPDA.yes));
-    // console.log("No: ", Number(pollPDA.no));
 
     expect(Number(pollPDA.yes)).to.eq(0);
     expect(Number(pollPDA.no)).to.eq(0);
@@ -148,7 +160,7 @@ describe("voting_app", () => {
   it("User 1 votes yes on poll 1", async () => {
     console.log("User 1 votes yes on poll 1");
 
-    const pollNumber = 1;
+    const pollNumber = poll1Id;
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
       program.programId
@@ -161,10 +173,6 @@ describe("voting_app", () => {
     );
 
     const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("'Yes' Before: ", Number(pollPDABefore.yes));
-    // console.log("'No' Before: ", Number(pollPDABefore.no));
-    // console.log("-------------");
 
     await program.methods
       .vote(true) // true = "yes"
@@ -180,10 +188,6 @@ describe("voting_app", () => {
     const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
     const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
 
-    // console.log("'Yes' After: ", Number(pollPDAAfter.yes));
-    // console.log("'No' After: ", Number(pollPDAAfter.no));
-    // console.log("Voter's Vote: ", voterPDA.vote);
-
     expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes) + 1);
     expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no));
     expect(voterPDA.voted).to.be.true;
@@ -193,7 +197,7 @@ describe("voting_app", () => {
   it("User 2 votes no on poll 2", async () => {
     console.log("User 2 votes no on poll 2");
 
-    const pollNumber = 2;
+    const pollNumber = poll2Id;
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
       program.programId
@@ -206,10 +210,6 @@ describe("voting_app", () => {
     );
 
     const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("'Yes' Before: ", Number(pollPDABefore.yes));
-    // console.log("'No' Before: ", Number(pollPDABefore.no));
-    // console.log("-------------");
 
     await program.methods
       .vote(false) // true = "yes"
@@ -225,10 +225,6 @@ describe("voting_app", () => {
     const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
     const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
 
-    // console.log("'Yes' After: ", Number(pollPDAAfter.yes));
-    // console.log("'No' After: ", Number(pollPDAAfter.no));
-    // console.log("Voter's Vote: ", voterPDA.vote);
-
     expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes));
     expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) + 1);
     expect(voterPDA.voted).to.be.true;
@@ -238,7 +234,7 @@ describe("voting_app", () => {
   it("User 1 votes twice on poll 1", async () => {
     console.log("User 1 votes yes on poll 1");
 
-    const pollNumber = 1;
+    const pollNumber = poll1Id;
 
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
@@ -264,7 +260,6 @@ describe("voting_app", () => {
         .rpc();
     }
     catch (error:any) {
-      // console.log(error.message);
       expect(error.message).to.contain("already in use"); // Check that the error message contains the expected text
     }
   });
@@ -272,7 +267,7 @@ describe("voting_app", () => {
   it("User 3 votes no on poll 2", async () => {
     console.log("User 2 votes no on poll 2");
 
-    const pollNumber = 2;
+    const pollNumber = poll2Id;
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
       program.programId
@@ -285,10 +280,6 @@ describe("voting_app", () => {
     );
 
     const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("'Yes' Before: ", Number(pollPDABefore.yes));
-    // console.log("'No' Before: ", Number(pollPDABefore.no));
-    // console.log("-------------");
 
     await program.methods
       .vote(false) // true = "yes"
@@ -304,10 +295,6 @@ describe("voting_app", () => {
     const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
     const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
 
-    // console.log("'Yes' After: ", Number(pollPDAAfter.yes));
-    // console.log("'No' After: ", Number(pollPDAAfter.no));
-    // console.log("Voter's Vote: ", voterPDA.vote);
-
     expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes));
     expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) + 1);
     expect(voterPDA.voted).to.be.true;
@@ -317,7 +304,7 @@ describe("voting_app", () => {
   it("User 4 votes no on poll 2", async () => {
     console.log("User 4 votes no on poll 2");
 
-    const pollNumber = 2;
+    const pollNumber = poll2Id;
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
       program.programId
@@ -330,10 +317,6 @@ describe("voting_app", () => {
     );
 
     const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("'Yes' Before: ", Number(pollPDABefore.yes));
-    // console.log("'No' Before: ", Number(pollPDABefore.no));
-    // console.log("-------------");
 
     await program.methods
       .vote(false) // true = "yes"
@@ -349,10 +332,6 @@ describe("voting_app", () => {
     const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
     const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
 
-    // console.log("'Yes' After: ", Number(pollPDAAfter.yes));
-    // console.log("'No' After: ", Number(pollPDAAfter.no));
-    // console.log("Voter's Vote: ", voterPDA.vote);
-
     expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes));
     expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) + 1);
     expect(voterPDA.voted).to.be.true;
@@ -362,7 +341,7 @@ describe("voting_app", () => {
   it("User 5 votes yes on poll 2", async () => {
     console.log("User 5 votes yes on poll 2");
 
-    const pollNumber = 2;
+    const pollNumber = poll2Id;
     const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
       program.programId
@@ -375,10 +354,6 @@ describe("voting_app", () => {
     );
 
     const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    // console.log("'Yes' Before: ", Number(pollPDABefore.yes));
-    // console.log("'No' Before: ", Number(pollPDABefore.no));
-    // console.log("-------------");
 
     await program.methods
       .vote(true) // true = "yes"
@@ -393,10 +368,6 @@ describe("voting_app", () => {
 
     const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
     const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
-
-    // console.log("'Yes' After: ", Number(pollPDAAfter.yes));
-    // console.log("'No' After: ", Number(pollPDAAfter.no));
-    // console.log("Voter's Vote: ", voterPDA.vote);
 
     expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes) + 1);
     expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no));
@@ -456,7 +427,277 @@ describe("voting_app", () => {
     }
   });
 
-  
+  describe("Vote Updates", () => {
+    const voter = anchor.web3.Keypair.generate(); // Voter
+    const nonAdmin = anchor.web3.Keypair.generate(); // Non-admin user
+    let pollPDAAddress;
+    let voterPDAAddress;
+
+    before("Setup", async () => {
+        if (network === "localhost") {
+            await provider.connection.requestAirdrop(voter.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+            await provider.connection.requestAirdrop(nonAdmin.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+        } else if (network === "devnet") {
+            const transaction = new anchor.web3.Transaction().add(
+                anchor.web3.SystemProgram.transfer({
+                    fromPubkey: owner.publicKey,
+                    toPubkey: voter.publicKey,
+                    lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+                }),
+                anchor.web3.SystemProgram.transfer({
+                    fromPubkey: owner.publicKey,
+                    toPubkey: nonAdmin.publicKey,
+                    lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+                })
+            );
+            await provider.sendAndConfirm(transaction);
+        }
+    });
+
+    it("Creates a poll for testing updates", async () => {
+        const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
+        const pollNumber = globalPDA.pollsCounter;
+
+        await program.methods
+        .createPoll("Can I change my vote?", new BN(60 * 60)) // 1 hour
+        .accounts({
+            globalAccount: globalPDAAddress,
+            user: owner.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+
+        [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("poll"), Buffer.from(pollNumber.toArray("le", 8))],
+        program.programId
+        );
+    });
+
+    it("Voter votes YES initially", async () => {
+        [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("voter"), pollPDAAddress.toBuffer(), voter.publicKey.toBuffer()],
+        program.programId
+        );
+
+        await program.methods
+        .vote(true) // Yes
+        .accounts({
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([voter])
+        .rpc();
+
+        const pollAccount = await program.account.pollAccount.fetch(pollPDAAddress);
+        const voterAccount = await program.account.voterAccount.fetch(voterPDAAddress);
+
+        expect(Number(pollAccount.yes)).to.eq(1);
+        expect(Number(pollAccount.no)).to.eq(0);
+        expect(voterAccount.vote).to.be.true;
+    });
+
+    it("Voter changes vote to NO", async () => {
+        await program.methods
+        .updateVote(false) // No
+        .accounts({
+            globalAccount: globalPDAAddress,
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+        })
+        .signers([voter])
+        .rpc();
+
+        const pollAccount = await program.account.pollAccount.fetch(pollPDAAddress);
+        const voterAccount = await program.account.voterAccount.fetch(voterPDAAddress);
+
+        expect(Number(pollAccount.yes)).to.eq(0);
+        expect(Number(pollAccount.no)).to.eq(1);
+        expect(voterAccount.vote).to.be.false;
+    });
+
+    it("Admin disables vote updates", async () => {
+        await program.methods
+        .toggleVoteUpdates()
+        .accounts({
+            globalAccount: globalPDAAddress,
+            user: owner.publicKey,
+        })
+        .rpc();
+
+        const globalAccount = await program.account.globalAccount.fetch(globalPDAAddress);
+        expect(globalAccount.voteUpdatesEnabled).to.be.false;
+    });
+
+    it("Voter fails to change vote when updates are disabled", async () => {
+        try {
+        await program.methods
+            .updateVote(true) // Try to change back to Yes
+            .accounts({
+            globalAccount: globalPDAAddress,
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+            })
+            .signers([voter])
+            .rpc();
+        expect.fail("Should have failed");
+        } catch (error: any) {
+        expect(error.message).to.contain("VoteUpdatesDisabled");
+        }
+    });
+
+    it("Non-admin fails to toggle vote updates", async () => {
+        try {
+        await program.methods
+            .toggleVoteUpdates()
+            .accounts({
+            globalAccount: globalPDAAddress,
+            user: nonAdmin.publicKey,
+            })
+            .signers([nonAdmin])
+            .rpc();
+        expect.fail("Should have failed");
+        } catch (error: any) {
+        expect(error.message).to.contain("Unauthorized");
+        }
+    });
+
+    it("Admin enables vote updates again", async () => {
+        await program.methods
+        .toggleVoteUpdates()
+        .accounts({
+            globalAccount: globalPDAAddress,
+            user: owner.publicKey,
+        })
+        .rpc();
+
+        const globalAccount = await program.account.globalAccount.fetch(globalPDAAddress);
+        expect(globalAccount.voteUpdatesEnabled).to.be.true;
+    });
+
+    it("Voter can change vote again", async () => {
+        await program.methods
+        .updateVote(true) // Change back to Yes
+        .accounts({
+            globalAccount: globalPDAAddress,
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+        })
+        .signers([voter])
+        .rpc();
+
+        const pollAccount = await program.account.pollAccount.fetch(pollPDAAddress);
+        expect(Number(pollAccount.yes)).to.eq(1);
+        expect(Number(pollAccount.no)).to.eq(0);
+    });
+  });
+
+  describe("Vote Withdrawal", () => {
+    const voter = anchor.web3.Keypair.generate(); // Voter
+    let pollPDAAddress;
+    let voterPDAAddress;
+
+    before("Setup", async () => {
+        if (network === "localhost") {
+            await provider.connection.requestAirdrop(voter.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+        } else if (network === "devnet") {
+            const transaction = new anchor.web3.Transaction().add(
+                anchor.web3.SystemProgram.transfer({
+                    fromPubkey: owner.publicKey,
+                    toPubkey: voter.publicKey,
+                    lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+                })
+            );
+            await provider.sendAndConfirm(transaction);
+        }
+    });
+
+    it("Creates a poll for testing withdrawal", async () => {
+        const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
+        const pollNumber = globalPDA.pollsCounter;
+
+        await program.methods
+        .createPoll("Can I withdraw my vote?", new BN(60 * 60)) // 1 hour
+        .accounts({
+            globalAccount: globalPDAAddress,
+            user: owner.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+
+        [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("poll"), Buffer.from(pollNumber.toArray("le", 8))],
+        program.programId
+        );
+    });
+
+    it("Voter votes YES", async () => {
+        [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("voter"), pollPDAAddress.toBuffer(), voter.publicKey.toBuffer()],
+        program.programId
+        );
+
+        await program.methods
+        .vote(true) // Yes
+        .accounts({
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([voter])
+        .rpc();
+
+        const pollAccount = await program.account.pollAccount.fetch(pollPDAAddress);
+        const voterAccount = await program.account.voterAccount.fetch(voterPDAAddress);
+
+        expect(Number(pollAccount.yes)).to.eq(1);
+        expect(voterAccount.vote).to.be.true;
+    });
+
+    it("Voter withdraws vote", async () => {
+        await program.methods
+        .withdrawVote()
+        .accounts({
+            globalAccount: globalPDAAddress,
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+        })
+        .signers([voter])
+        .rpc();
+
+        const pollAccount = await program.account.pollAccount.fetch(pollPDAAddress);
+        expect(Number(pollAccount.yes)).to.eq(0);
+
+        // Verify voter account is closed
+        const voterAccountInfo = await provider.connection.getAccountInfo(voterPDAAddress);
+        expect(voterAccountInfo).to.be.null;
+    });
+
+    it("Voter can vote again after withdrawal", async () => {
+        await program.methods
+        .vote(false) // No
+        .accounts({
+            pollAccount: pollPDAAddress,
+            voterAccount: voterPDAAddress,
+            user: voter.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([voter])
+        .rpc();
+
+        const pollAccount = await program.account.pollAccount.fetch(pollPDAAddress);
+        const voterAccount = await program.account.voterAccount.fetch(voterPDAAddress);
+
+        expect(Number(pollAccount.no)).to.eq(1);
+        expect(voterAccount.vote).to.be.false;
+    });
+  });
 });
 
 /**

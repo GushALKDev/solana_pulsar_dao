@@ -1,5 +1,5 @@
 {
-  "address": "4LUhz8RvrWVm9YtVepsaGYEF6tdZofUjBY7hicBd5Xw4",
+  "address": "GfEPn9ygokVBRpiVQU8CGDnVJwtiksE9SBc3rEBMZiJD",
   "metadata": {
     "name": "voting_app",
     "version": "0.1.0",
@@ -263,6 +263,61 @@
           "type": "bool"
         }
       ]
+    },
+    {
+      "name": "withdraw_vote",
+      "discriminator": [
+        243,
+        255,
+        70,
+        200,
+        3,
+        242,
+        103,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "poll_account",
+          "writable": true
+        },
+        {
+          "name": "voter_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "poll_account"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [

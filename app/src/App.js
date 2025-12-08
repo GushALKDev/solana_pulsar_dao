@@ -3,15 +3,19 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './components/Home';
 import CreatePoll from './components/CreatePoll';
 import Poll from './components/Poll';
+import DashboardLayout from './components/DashboardLayout';
+import './App.css';
 
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/create-poll" element={<CreatePoll />} />
-        <Route path="/poll/:pollPDAAddress" element={<Poll />} />
-      </Routes>
+      <DashboardLayout>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/create-poll" element={<CreatePoll />} />
+          <Route path="/poll/:pollPDAAddress" element={<Poll />} />
+        </Routes>
+      </DashboardLayout>
     </Router>
   );
 }

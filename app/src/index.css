@@ -1,13 +1,124 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #050511;
+  background-image: radial-gradient(circle at 50% 0%, #1a1c4b 0%, #050511 70%);
+  background-attachment: fixed;
+  color: #e0e6ed;
+  min-height: 100vh;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Nebula Background - Updated to Blue Theme */
+.bg-nebula {
+  background-color: #020617;
+  background-image:
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.9)),
+    url('./assets/background.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* Card Nebula Background */
+.bg-card-nebula {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
+    radial-gradient(circle at 50% 0%, rgba(188, 19, 254, 0.1) 0%, transparent 50%);
+}
+
+/* Circuit Pattern */
+/* Option 1: Dot Grid Pattern (Softened) */
+.bg-circuit {
+  background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1' fill='rgba(0, 243, 255, 0.3)'/%3E%3C/svg%3E");
+  background-size: 20px 20px;
+  opacity: 0.4;
+  mask-image: linear-gradient(to top, black, transparent);
+  -webkit-mask-image: linear-gradient(to top, black, transparent);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0b1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #374151;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(22, 24, 50, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+  border-color: rgba(0, 243, 255, 0.3);
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Wallet Adapter Button Override - Scoped to Header to avoid affecting Modals */
+header .wallet-adapter-button {
+  background: linear-gradient(to right, #2563eb, #9333ea) !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  /* rounded-xl */
+  font-family: 'Inter', sans-serif !important;
+  /* Match site font */
+  font-weight: 700 !important;
+  font-size: 0.875rem !important;
+  /* text-sm */
+  height: 2.5rem !important;
+  /* h-10 */
+  padding-left: 1.5rem !important;
+  /* px-6 */
+  padding-right: 1.5rem !important;
+  color: white !important;
+  transition: all 0.3s ease !important;
+}
+
+header .wallet-adapter-button:hover {
+  box-shadow: 0 0 20px rgba(147, 51, 234, 0.5) !important;
+  transform: scale(1.05) !important;
+}
+
+header .wallet-adapter-button:active {
+  transform: scale(0.95) !important;
+}
+
+/* Ensure the start icon spacing is correct */
+header .wallet-adapter-button-start-icon {
+  margin-right: 0.5rem !important;
 }

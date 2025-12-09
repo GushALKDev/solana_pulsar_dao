@@ -1,109 +1,75 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { Link } from 'react-router-dom';
 import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
 import {
-  Container,
   CircularProgress,
-  Grid,
   Typography,
 } from '@mui/material';
 import {
   program,
   programId,
-  pollSeed,
+  proposalSeed,
   globalAccountPDAAddress,
   connection,
 } from '../config';
 import Star from './Star';
 
-/**
- * Component to display time remaining for a poll
- */
-const TimeRemaining = ({ deadline }) => {
-  const [timeLeft, setTimeLeft] = useState('');
-
-  useEffect(() => {
-    if (!deadline || deadline === 0) {
-      setTimeLeft('No deadline');
-      return;
-    }
-
-    const updateTimer = () => {
-      const now = Math.floor(Date.now() / 1000);
-      const remaining = deadline - now;
-
-      if (remaining <= 0) {
-        setTimeLeft('Expired');
-      } else {
-        const days = Math.floor(remaining / 86400);
-        const hours = Math.floor((remaining % 86400) / 3600);
-        const minutes = Math.floor((remaining % 3600) / 60);
-        
-        if (days > 0) {
-          setTimeLeft(`${days}d ${hours}h`);
-        } else if (hours > 0) {
-          setTimeLeft(`${hours}h ${minutes}m`);
-        } else {
-          setTimeLeft(`${minutes}m`);
-        }
-      }
-    };
-
-    updateTimer();
-    const timerInterval = setInterval(updateTimer, 1000);
-
-    return () => clearInterval(timerInterval);
-  }, [deadline]);
-
-  return (
-    <Typography 
-      variant="body2" 
-      sx={{ 
-        color: timeLeft === 'Expired' ? 'error.main' : 'text.secondary',
-        fontWeight: timeLeft === 'Expired' ? 'bold' : 'normal'
-      }}
-    >
-      {timeLeft === 'Expired' ? '🔴 Expired' : `⏱️ ${timeLeft}`}
-    </Typography>
-  );
-};
-
 const Home = () => {
-  const [polls, setPolls] = useState([]); // Holds the list of polls
-  const [loading, setLoading] = useState(false); // Indicates loading state
-  const [pollsCounter, setPollsCounter] = useState(0); // Stores the current number of polls
-  const [admin, setAdmin] = useState(null); // Stores the admin public key
-  const [voteUpdatesEnabled, setVoteUpdatesEnabled] = useState(false); // Stores the global vote update setting
-  const [togglingVoteUpdates, setTogglingVoteUpdates] = useState(false); // Loading state for toggle
-  const { connected, publicKey, sendTransaction } = useWallet(); // Wallet connection state
+  const [proposals, setProposals] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [proposalsCounter, setProposalsCounter] = useState(0);
+  const [admin, setAdmin] = useState(null);
+  const [voteUpdatesEnabled, setVoteUpdatesEnabled] = useState(false);
+  const [togglingVoteUpdates, setTogglingVoteUpdates] = useState(false);
+  const [votingPower, setVotingPower] = useState(0);
+  const [tokenMint, setTokenMint] = useState(null);
+  const { connected, publicKey, sendTransaction } = useWallet();
 
-  /**
-   * Fetch the global polls_counter and admin settings from the program.
-   */
   const fetchGlobalAccount = async () => {
     try {
       const votingProgram = program({ publicKey: null });
       const globalAccountPDA = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
       
-      const fetchedCounter = Number(globalAccountPDA.pollsCounter.toString());
-      // Update pollsCounter only if it has changed
-      if (fetchedCounter !== pollsCounter) {
-        setPollsCounter(fetchedCounter);
+      const fetchedCounter = Number(globalAccountPDA.proposalsCounter.toString());
+      if (fetchedCounter !== proposalsCounter) {
+        setProposalsCounter(fetchedCounter);
       }
 
       setAdmin(globalAccountPDA.admin.toString());
       setVoteUpdatesEnabled(globalAccountPDA.voteUpdatesEnabled);
+      if (globalAccountPDA.tokenMint) {
+        setTokenMint(globalAccountPDA.tokenMint.toString());
+      }
 
     } catch (error) {
       console.error('Error fetching global account:', error);
     }
   };
 
-  /**
-   * Toggles the vote updates setting. Only available to the admin.
-   */
+  useEffect(() => {
+    const fetchVotingPower = async () => {
+      if (!publicKey || !tokenMint) {
+        setVotingPower(0);
+        return;
+      }
+
+      try {
+        const mintPubkey = new PublicKey(tokenMint);
+        const ata = await getAssociatedTokenAddress(mintPubkey, publicKey);
+        const accountInfo = await getAccount(connection, ata);
+        const balance = Number(accountInfo.amount);
+        setVotingPower(Math.floor(Math.sqrt(balance)));
+      } catch (e) {
+        console.log("Error fetching token balance or no account found", e);
+        setVotingPower(0);
+      }
+    };
+
+    fetchVotingPower();
+  }, [publicKey, tokenMint]);
+
   const toggleVoteUpdates = async () => {
     if (!publicKey) return;
 
@@ -121,7 +87,6 @@ const Home = () => {
         const signature = await sendTransaction(transaction, connection);
         await connection.confirmTransaction(signature, 'finalized');
         
-        // Refresh global account data
         await fetchGlobalAccount();
     } catch (error) {
         console.error("Error toggling vote updates:", error);
@@ -130,85 +95,68 @@ const Home = () => {
     }
   };
 
-  /**
-   * Fetches the details of all polls up to the current pollsCounter.
-   * Compares the current polls state with the fetched data and updates
-   * the state only if there are changes.
-   */
-  const fetchPolls = async () => {
-    if (pollsCounter === 0) return; // Skip if no polls exist
+  const fetchProposals = async () => {
+    if (proposalsCounter === 0) return;
 
     try {
       const votingProgram = program({ publicKey: null });
-      const foundPolls = [];
+      const foundProposals = [];
 
-      // Fetch poll data for each poll
-      for (let counter = 1; counter <= pollsCounter; counter++) {
-        const [pollPDAAddress] = await PublicKey.findProgramAddress(
-          [Buffer.from(pollSeed), Buffer.from(toLittleEndian8Bytes(counter))],
+      for (let counter = 1; counter <= proposalsCounter; counter++) {
+        const [proposalPDAAddress] = await PublicKey.findProgramAddress(
+          [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(counter))],
           programId
         );
 
         try {
-          const pollAccount = await votingProgram.account.pollAccount.fetch(pollPDAAddress);
-          if (pollAccount) {
-            const pollData = {
+          const proposalAccount = await votingProgram.account.proposalAccount.fetch(proposalPDAAddress);
+          if (proposalAccount) {
+            const proposalData = {
               number: counter,
-              question: pollAccount.question.toString(),
-              totalVotes: Number(pollAccount.yes.toString()) + Number(pollAccount.no.toString()),
-              deadline: Number(pollAccount.deadline.toString()),
-              pda: pollPDAAddress.toBase58(),
+              question: proposalAccount.question.toString(),
+              totalVotes: Number(proposalAccount.yes.toString()) + Number(proposalAccount.no.toString()),
+              deadline: Number(proposalAccount.deadline.toString()),
+              pda: proposalPDAAddress.toBase58(),
             };
-            foundPolls.push(pollData);
+            foundProposals.push(proposalData);
           }
-        } catch (pollFetchError) {
-          console.warn(`Failed to fetch poll at counter ${counter}`, pollFetchError);
+        } catch (proposalFetchError) {
+          console.warn(`Failed to fetch proposal at counter ${counter}`, proposalFetchError);
         }
       }
 
-      // Update polls state only if there are changes
-      if (JSON.stringify(foundPolls) !== JSON.stringify(polls)) {
-        setPolls(foundPolls);
+      if (JSON.stringify(foundProposals) !== JSON.stringify(proposals)) {
+        setProposals(foundProposals);
       }
     } catch (error) {
-      console.error('Error fetching polls:', error);
+      console.error('Error fetching proposals:', error);
     }
   };
 
-  /**
-   * Converts a number to a Little Endian byte array (8 bytes).
-   */
   function toLittleEndian8Bytes(num) {
     const buffer = Buffer.alloc(8);
     buffer.writeUInt32LE(num, 0);
     return buffer;
   }
 
-  /**
-   * Initial data fetch and periodic updates every 30 seconds.
-   * Calls fetchGlobalAccount and fetchPolls only if changes are detected.
-   */
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       await fetchGlobalAccount();
-      await fetchPolls();
+      await fetchProposals();
       setLoading(false);
     };
 
     fetchData();
 
     const interval = setInterval(async () => {
-      await fetchGlobalAccount(); // Fetch counter and settings
-      await fetchPolls(); // Fetch updated polls if counter changes
+      await fetchGlobalAccount();
+      await fetchProposals();
     }, 30000);
 
-    return () => clearInterval(interval); // Cleanup interval on unmount
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollsCounter]);
-
-  // Dashboard Widgets Data (Mock)
-  const chartData = [10, 25, 60, 40, 70, 55, 90];
+  }, [proposalsCounter]);
 
   return (
     <div className="space-y-8">
@@ -220,9 +168,9 @@ const Home = () => {
                 <div className="flex flex-col items-center justify-center pt-6">
                     <p className="text-gray-300 font-sans text-2xl mb-2 mt-4 tracking-wide font-medium uppercase">Voting Power</p>
                     <h3 className="text-3xl font-sans font-bold text-white mb-2 tracking-tight drop-shadow-lg">
-                        500,000
+                        {votingPower.toLocaleString()}
                     </h3>
-                    <p className="text-pulsar-primary font-sans font-bold tracking-widest text-2xl">$PULSAR</p>
+                    <p className="text-pulsar-primary font-sans font-bold tracking-widest text-2xl">VOTES</p>
                 </div>
             </Star>
         </div>
@@ -287,16 +235,23 @@ const Home = () => {
 
       {/* Active Proposals Section */}
       <div>
-        <h3 className="text-xl font-display text-white mb-6 tracking-wide flex items-center gap-3">
-            <span className="whitespace-nowrap">Active Proposals</span>
-            <span className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent"></span>
-        </h3>
+        <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-display text-white tracking-wide flex items-center gap-3">
+                <span className="whitespace-nowrap">Active Proposals</span>
+                <span className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent"></span>
+            </h3>
+            <Link to="/create-proposal">
+                <button className="px-4 py-2 bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white rounded-lg font-bold text-sm hover:shadow-[0_0_20px_rgba(153,69,255,0.5)] transition-all duration-300">
+                    + Create Proposal
+                </button>
+            </Link>
+        </div>
 
         {loading ? (
           <div className="flex justify-center items-center h-32">
             <CircularProgress sx={{ color: '#00f3ff' }} />
           </div>
-        ) : polls.length === 0 ? (
+        ) : proposals.length === 0 ? (
            <div className="text-center py-12 glass-panel rounded-xl border border-dashed border-white/10">
             <Typography variant="h6" className="font-display text-pulsar-muted">
               No active proposals found.
@@ -304,16 +259,16 @@ const Home = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {polls.map((poll, index) => (
+            {proposals.map((proposal, index) => (
               <div key={index} className="glass-card bg-card-nebula rounded-xl p-6 border border-white/5 hover:border-pulsar-primary/50 transition-all duration-300 group relative">
                 <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-pulsar-primary to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 
                 <div className="mb-4">
-                    <span className="text-xs font-mono text-pulsar-muted">Proposal #{poll.number.toString().padStart(3, '0')}</span>
+                    <span className="text-xs font-mono text-pulsar-muted">Proposal #{proposal.number.toString().padStart(3, '0')}</span>
                 </div>
 
                 <h4 className="text-lg font-display font-bold text-white mb-3 line-clamp-2 h-14">
-                    {poll.question}
+                    {proposal.question}
                 </h4>
 
                 <p className="text-sm text-pulsar-muted mb-6 line-clamp-2">
@@ -328,7 +283,7 @@ const Home = () => {
                         <span className="text-xs text-pulsar-muted">Pulsar Core</span>
                     </div>
                     
-                    <Link to={`/poll/${poll.pda}`} style={{ textDecoration: 'none' }}>
+                    <Link to={`/proposal/${proposal.pda}`} style={{ textDecoration: 'none' }}>
                         <button className="px-4 py-2 bg-pulsar-primary/10 text-pulsar-primary border border-pulsar-primary/50 rounded hover:bg-pulsar-primary hover:text-black transition-all duration-300 text-xs font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(0,243,255,0.2)] hover:shadow-[0_0_15px_rgba(0,243,255,0.5)]">
                             Vote Now
                         </button>
@@ -340,7 +295,7 @@ const Home = () => {
         )}
       </div>
 
-      {/* Admin Controls (Hidden/Collapsed by default or moved to settings in real app, kept here for functionality) */}
+      {/* Admin Controls */}
       {connected && publicKey && admin && publicKey.toString() === admin && (
         <div className="mt-12 p-6 glass-panel rounded-xl border border-white/5 opacity-50 hover:opacity-100 transition-opacity">
             <div className="flex justify-between items-center">

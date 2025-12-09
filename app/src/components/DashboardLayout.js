@@ -17,7 +17,7 @@ const DashboardLayout = ({ children }) => {
       case '/privacy': return 'Privacy';
       case '/settings': return 'Settings';
       default: 
-        if (pathname.startsWith('/poll/')) return 'Poll Details';
+        if (pathname.startsWith('/proposal/')) return 'Proposal Details';
         return 'Dashboard';
     }
   };

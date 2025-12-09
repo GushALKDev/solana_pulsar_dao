@@ -1,11 +1,12 @@
 [toolchain]
+anchor_version = "0.31.1"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
-pulsar_dao = "GfEPn9ygokVBRpiVQU8CGDnVJwtiksE9SBc3rEBMZiJD"
+pulsar_dao = "FMny2cz2orrWDJ59QwsHXRCL97BcLQncsNfeko7EBrJK"
 
 [registry]
 url = "https://api.apr.dev"
@@ -16,3 +17,6 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[test]
+startup_wait = 10000

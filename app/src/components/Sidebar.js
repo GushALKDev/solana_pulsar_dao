@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useConnection } from '@solana/wallet-adapter-react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { 
   LayoutDashboard, 
   Vote, 
@@ -8,28 +8,66 @@ import {
   FileText, 
   Shield, 
   Settings,
-  Bell
+  Bell,
+  Coins
 } from 'lucide-react';
+import { program, globalAccountPDAAddress } from '../config';
 
 import solanaLogo from '../assets/solana_logo.png';
 
 const Sidebar = () => {
   const location = useLocation();
   const { connection } = useConnection();
+  const { publicKey } = useWallet();
   const [isOnline, setIsOnline] = useState(false);
   const [latency, setLatency] = useState(null);
+  const [admin, setAdmin] = useState(null);
+  const [networkName, setNetworkName] = useState('Disconnected');
+
+  useEffect(() => {
+    const fetchGlobalAccount = async () => {
+      try {
+        const votingProgram = program({ publicKey: null });
+        const globalAccount = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
+        setAdmin(globalAccount.admin.toString());
+      } catch (error) {
+        console.log("Global account not initialized or error fetching", error);
+      }
+    };
+
+    fetchGlobalAccount();
+  }, []);
 
   useEffect(() => {
       const checkConnection = async () => {
           try {
               const start = Date.now();
               await connection.getVersion();
+              const genesisHash = await connection.getGenesisHash();
+              console.log("Current Genesis Hash:", genesisHash);
+              
+              const DEVNET_GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkr96';
+              const DEVNET_GENESIS_ALT = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG'; // Alternative/Current Devnet Hash
+              const MAINNET_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
+              const TESTNET_GENESIS = '4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY';
+
+              if (genesisHash === DEVNET_GENESIS || genesisHash === DEVNET_GENESIS_ALT) {
+                  setNetworkName('Solana Devnet');
+              } else if (genesisHash === MAINNET_GENESIS) {
+                  setNetworkName('Solana Mainnet');
+              } else if (genesisHash === TESTNET_GENESIS) {
+                  setNetworkName('Solana Testnet');
+              } else {
+                  setNetworkName('Unknown Network');
+              }
+
               const end = Date.now();
               setIsOnline(true);
               setLatency(end - start);
           } catch (e) {
               setIsOnline(false);
               setLatency(null);
+              setNetworkName('Disconnected');
           }
       };
 
@@ -41,6 +79,7 @@ const Sidebar = () => {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Vote, label: 'Voting', path: '/voting' },
+    ...(publicKey && admin && publicKey.toString() === admin ? [{ icon: Coins, label: 'DAO Admin', path: '/tokens', badge: 'ADMIN' }] : []),
     { icon: Users, label: 'Community', path: '/community' },
     { icon: FileText, label: 'Proposals', path: '/proposals', badge: 'NEW' },
     { icon: Shield, label: 'Privacy', path: '/privacy' },
@@ -117,7 +156,7 @@ const Sidebar = () => {
             <div className="flex flex-col">
                 <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-0.5">Network</span>
                 <span className={`text-sm font-bold tracking-wide transition-colors duration-300 ${isOnline ? 'text-white' : 'text-red-400'}`}>
-                    {isOnline ? 'Solana Mainnet' : 'Disconnected'}
+                    {networkName}
                 </span>
                 {isOnline && latency && (
                     <span className="text-[9px] text-[#14F195] font-mono mt-0.5">{latency}ms</span>

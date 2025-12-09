@@ -16,7 +16,7 @@ export const programId = new PublicKey(idl.address);
 
 // PDAs seeds
 export const globalStateSeed = 'global_account';
-export const pollSeed = 'poll';
+export const proposalSeed = 'proposal';
 export const voterSeed = 'voter';
 
 // Helper to create the AnchorProvider instance

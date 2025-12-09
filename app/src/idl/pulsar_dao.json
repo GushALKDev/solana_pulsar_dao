@@ -1,10 +1,536 @@
 {
-  "version": "0.1.0",
-  "name": "pulsar_dao",
-  "address": "GfEPn9ygokVBRpiVQU8CGDnVJwtiksE9SBc3rEBMZiJD",
-  "instructions": [],
-  "accounts": [],
-  "types": [],
-  "events": [],
-  "errors": []
+  "address": "FMny2cz2orrWDJ59QwsHXRCL97BcLQncsNfeko7EBrJK",
+  "metadata": {
+    "name": "pulsar_dao",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "create_proposal",
+      "discriminator": [
+        132,
+        116,
+        68,
+        174,
+        216,
+        160,
+        198,
+        22
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "proposal_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_account.proposals_counter",
+                "account": "GlobalAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "question",
+          "type": "string"
+        },
+        {
+          "name": "duration",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "toggle_vote_updates",
+      "discriminator": [
+        125,
+        70,
+        220,
+        6,
+        186,
+        80,
+        228,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_vote",
+      "discriminator": [
+        95,
+        223,
+        212,
+        112,
+        234,
+        242,
+        37,
+        229
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "proposal_account",
+          "writable": true
+        },
+        {
+          "name": "voter_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proposal_account"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_account"
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "vote",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "vote",
+      "discriminator": [
+        227,
+        110,
+        155,
+        23,
+        136,
+        126,
+        172,
+        25
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "proposal_account",
+          "writable": true
+        },
+        {
+          "name": "voter_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proposal_account"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_account"
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "vote",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_vote",
+      "discriminator": [
+        243,
+        255,
+        70,
+        200,
+        3,
+        242,
+        103,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true
+        },
+        {
+          "name": "proposal_account",
+          "writable": true
+        },
+        {
+          "name": "voter_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proposal_account"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GlobalAccount",
+      "discriminator": [
+        129,
+        105,
+        124,
+        171,
+        189,
+        42,
+        108,
+        69
+      ]
+    },
+    {
+      "name": "ProposalAccount",
+      "discriminator": [
+        164,
+        190,
+        4,
+        248,
+        203,
+        124,
+        243,
+        64
+      ]
+    },
+    {
+      "name": "VoterAccount",
+      "discriminator": [
+        24,
+        202,
+        161,
+        124,
+        196,
+        184,
+        105,
+        236
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ProposalCreated",
+      "discriminator": [
+        186,
+        8,
+        160,
+        108,
+        81,
+        13,
+        51,
+        206
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AlreadyVoted",
+      "msg": "User already voted on this proposal."
+    },
+    {
+      "code": 6001,
+      "name": "QuestionTooLong",
+      "msg": "The question exceeds the maximum length of 200 characters."
+    },
+    {
+      "code": 6002,
+      "name": "ProposalExpired",
+      "msg": "The proposal has expired."
+    },
+    {
+      "code": 6003,
+      "name": "VoteUpdatesDisabled",
+      "msg": "Vote updates are disabled."
+    },
+    {
+      "code": 6004,
+      "name": "Unauthorized",
+      "msg": "Unauthorized."
+    },
+    {
+      "code": 6005,
+      "name": "InvalidTokenMint",
+      "msg": "Invalid Token Mint."
+    },
+    {
+      "code": 6006,
+      "name": "InvalidTokenOwner",
+      "msg": "Invalid Token Owner."
+    },
+    {
+      "code": 6007,
+      "name": "NoVotingPower",
+      "msg": "No Voting Power (Balance is 0)."
+    }
+  ],
+  "types": [
+    {
+      "name": "GlobalAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposals_counter",
+            "type": "u64"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "vote_updates_enabled",
+            "type": "bool"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "number",
+            "type": "u64"
+          },
+          {
+            "name": "question",
+            "type": "string"
+          },
+          {
+            "name": "author",
+            "type": "pubkey"
+          },
+          {
+            "name": "yes",
+            "type": "u64"
+          },
+          {
+            "name": "no",
+            "type": "u64"
+          },
+          {
+            "name": "deadline",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal_pda",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VoterAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "vote",
+            "type": "bool"
+          },
+          {
+            "name": "voted",
+            "type": "bool"
+          },
+          {
+            "name": "voting_power",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
 }

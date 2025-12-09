@@ -1,0 +1,154 @@
+{
+  "address": "FMny2cz2orrWDJ59QwsHXRCL97BcLQncsNfeko7EBrJK",
+  "metadata": {
+    "name": "pulsar_dao",
+    "version": "0.1.0",
+    "spec": "0.1.0"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "discriminator": [175, 175, 109, 31, 13, 152, 155, 237],
+      "accounts": [
+        {"name": "globalAccount", "writable": true},
+        {"name": "tokenMint"},
+        {"name": "user", "writable": true, "signer": true},
+        {"name": "systemProgram"}
+      ],
+      "args": []
+    },
+    {
+      "name": "createProposal",
+      "discriminator": [52, 246, 89, 209, 41, 158, 189, 85],
+      "accounts": [
+        {"name": "globalAccount", "writable": true},
+        {"name": "proposalAccount", "writable": true},
+        {"name": "user", "writable": true, "signer": true},
+        {"name": "systemProgram"}
+      ],
+      "args": [
+        {"name": "question", "type": "string"},
+        {"name": "duration", "type": "i64"}
+      ]
+    },
+    {
+      "name": "vote",
+      "discriminator": [227, 110, 155, 23, 136, 126, 172, 25],
+      "accounts": [
+        {"name": "globalAccount"},
+        {"name": "proposalAccount", "writable": true},
+        {"name": "voterAccount", "writable": true},
+        {"name": "tokenAccount"},
+        {"name": "user", "writable": true, "signer": true},
+        {"name": "systemProgram"}
+      ],
+      "args": [{"name": "vote", "type": "bool"}]
+    },
+    {
+      "name": "updateVote",
+      "discriminator": [38, 152, 252, 190, 2, 137, 166, 187],
+      "accounts": [
+        {"name": "globalAccount"},
+        {"name": "proposalAccount", "writable": true},
+        {"name": "voterAccount", "writable": true},
+        {"name": "tokenAccount"},
+        {"name": "user", "writable": true, "signer": true}
+      ],
+      "args": [{"name": "vote", "type": "bool"}]
+    },
+    {
+      "name": "toggleVoteUpdates",
+      "discriminator": [134, 219, 61, 27, 157, 167, 3, 197],
+      "accounts": [
+        {"name": "globalAccount", "writable": true},
+        {"name": "user", "writable": true, "signer": true}
+      ],
+      "args": []
+    },
+    {
+      "name": "withdrawVote",
+      "discriminator": [107, 216, 137, 61, 227, 184, 220, 142],
+      "accounts": [
+        {"name": "globalAccount"},
+        {"name": "proposalAccount", "writable": true},
+        {"name": "voterAccount", "writable": true},
+        {"name": "user", "writable": true, "signer": true}
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GlobalAccount",
+      "discriminator": [27, 110, 215, 146, 16, 50, 50, 48]
+    },
+    {
+      "name": "ProposalAccount",
+      "discriminator": [110, 234, 167, 188, 231, 136, 153, 111]
+    },
+    {
+      "name": "VoterAccount",
+      "discriminator": [241, 93, 35, 191, 254, 147, 17, 202]
+    }
+  ],
+  "events": [
+    {
+      "name": "ProposalCreated",
+      "discriminator": [25, 36, 68, 138, 234, 168, 155, 91],
+      "fields": [
+        {"name": "proposalPda", "type": "publicKey", "index": false}
+      ]
+    }
+  ],
+  "errors": [
+    {"code": 6000, "name": "AlreadyVoted", "msg": "User already voted on this proposal."},
+    {"code": 6001, "name": "QuestionTooLong", "msg": "The question exceeds the maximum length of 200 characters."},
+    {"code": 6002, "name": "ProposalExpired", "msg": "The proposal has expired."},
+    {"code": 6003, "name": "VoteUpdatesDisabled", "msg": "Vote updates are disabled."},
+    {"code": 6004, "name": "Unauthorized", "msg": "Unauthorized."},
+    {"code": 6005, "name": "InvalidTokenMint", "msg": "Invalid Token Mint."},
+    {"code": 6006, "name": "InvalidTokenOwner", "msg": "Invalid Token Owner."},
+    {"code": 6007, "name": "NoVotingPower", "msg": "No Voting Power (Balance is 0)."}
+  ],
+  "types": [
+    {
+      "name": "GlobalAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {"name": "proposalsCounter", "type": "u64"},
+          {"name": "admin", "type": "publicKey"},
+          {"name": "voteUpdatesEnabled", "type": "bool"},
+          {"name": "tokenMint", "type": "publicKey"}
+        ]
+      }
+    },
+    {
+      "name": "ProposalAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {"name": "number", "type": "u64"},
+          {"name": "question", "type": "string"},
+          {"name": "author", "type": "publicKey"},
+          {"name": "yes", "type": "u64"},
+          {"name": "no", "type": "u64"},
+          {"name": "deadline", "type": "i64"}
+        ]
+      }
+    },
+    {
+      "name": "VoterAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {"name": "proposal", "type": "publicKey"},
+          {"name": "voter", "type": "publicKey"},
+          {"name": "vote", "type": "bool"},
+          {"name": "voted", "type": "bool"},
+          {"name": "votingPower", "type": "u64"}
+        ]
+      }
+    }
+  ]
+}

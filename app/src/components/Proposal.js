@@ -143,6 +143,18 @@ const Proposal = () => {
 
     // Countdown Timer
     const [timeLeft, setTimeLeft] = useState('');
+    
+    // Auto-mark as read
+    useEffect(() => {
+        if (proposal && proposal.number) {
+            const currentLast = parseInt(localStorage.getItem('pulsar_last_read_proposal') || '0');
+            if (proposal.number > currentLast) {
+                localStorage.setItem('pulsar_last_read_proposal', proposal.number.toString());
+                window.dispatchEvent(new Event('pulsar-proposal-read'));
+            }
+        }
+    }, [proposal]);
+
     useEffect(() => {
         if (!proposal) return;
         

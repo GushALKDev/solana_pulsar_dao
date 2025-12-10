@@ -363,10 +363,7 @@ const TokenManager = () => {
       )}
 
       {/* Info Box */}
-      {/* ... keeping info box ... */}
-      <div className="mt-8 bg-[#1a1c2e]/50 rounded-lg p-6 border border-white/5">
-         {/* ... content ... */}
-      </div>
+      {/* ... Info Box removed ... */}
 
        {/* Circuit Breaker Section */}
       {isInitialized && isAdmin && (

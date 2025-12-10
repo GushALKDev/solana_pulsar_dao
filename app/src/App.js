@@ -6,6 +6,7 @@ import TokenManager from './components/TokenManager';
 import StakingPage from './components/StakingPage';
 import DashboardLayout from './components/DashboardLayout';
 import './App.css';
+import Analytics from './components/Analytics';
 import Proposal from './components/Proposal';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="/create-proposal" element={<CreateProposal />} />
           <Route path="/proposal/:id" element={<Proposal />} />
           <Route path="/staking" element={<StakingPage />} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route path="/dao-admin" element={<TokenManager />} />
         </Routes>
       </DashboardLayout>

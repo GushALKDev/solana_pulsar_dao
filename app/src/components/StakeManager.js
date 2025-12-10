@@ -173,7 +173,7 @@ const StakeManager = ({ tokenMintAddress }) => {
                     user: publicKey,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
-                    rent: web3.SYSVAR_RENT_PUBKEY
+                    rent: SYSVAR_RENT_PUBKEY
                 })
                 .instruction();
             transaction.add(depositIx);

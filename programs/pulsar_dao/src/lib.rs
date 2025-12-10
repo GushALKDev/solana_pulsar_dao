@@ -352,7 +352,12 @@ pub struct ToggleCircuitBreaker<'info> {
 
 #[derive(Accounts)]
 pub struct CreateProposal<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+        constraint = global_account.admin == author.key() @ ErrorCode::Unauthorized
+    )]
     pub global_account: Account<'info, GlobalAccount>,
     #[account(
         init,

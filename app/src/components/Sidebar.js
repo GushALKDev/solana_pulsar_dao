@@ -4,6 +4,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { 
   LayoutDashboard, 
   Vote, 
+  Lock, 
   Users, 
   FileText, 
   Shield, 
@@ -11,9 +12,12 @@ import {
   Bell,
   Coins
 } from 'lucide-react';
-import { program, globalAccountPDAAddress } from '../config';
+import { PublicKey } from '@solana/web3.js';
+import { program, globalAccountPDAAddress, programId } from '../config';
 
 import solanaLogo from '../assets/solana_logo.png';
+
+console.log("Current Program ID:", programId.toString());
 
 const Sidebar = () => {
   const location = useLocation();
@@ -76,12 +80,54 @@ const Sidebar = () => {
       return () => clearInterval(interval);
   }, [connection]);
   
+  const [upgradeAuthority, setUpgradeAuthority] = useState(null);
+
+  // Fetch program upgrade authority (Deployer)
+  useEffect(() => {
+     const getUpgradeAuthority = async () => {
+         try {
+             // Fetch the program account info
+             const programAccountInfo = await connection.getAccountInfo(programId);
+             
+             // Check if it's an Upgradeable Loader account
+             // The offset for ProgramData address is 4
+             const programDataAddress = new PublicKey(programAccountInfo.data.slice(4, 36));
+             
+             // Fetch ProgramData account
+             const programDataAccountInfo = await connection.getAccountInfo(programDataAddress);
+             
+             // Offset for Upgrade Authority closest to Option<Pubkey> usually at 13 (8 bytes slot + 1 byte option tag)
+             // If option tag is 1, then 32 bytes key follows.
+             // Slot (u64) = 0..8
+             // Option tag (u8) = 8..9
+             // Pubkey = 9..41
+             
+             // Offset for Upgrade Authority:
+             // 0-3: Enum variant (3)
+             // 4-11: Slot (u64)
+             // 12: Option tag (1 = Some)
+             // 13-45: Upgrade Authority Pubkey
+             
+             const upgradeAuthorityAddress = new PublicKey(programDataAccountInfo.data.slice(13, 45));
+             setUpgradeAuthority(upgradeAuthorityAddress.toString());
+             console.log("Dynamically fetched Upgrade Authority:", upgradeAuthorityAddress.toString());
+
+         } catch (e) {
+             console.log("Could not fetch upgrade authority", e);
+         }
+     };
+     
+     if (connection && programId) {
+         getUpgradeAuthority();
+     }
+  }, [connection]);
+
+  
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Vote, label: 'Voting', path: '/voting' },
-    ...(publicKey && admin && publicKey.toString() === admin ? [{ icon: Coins, label: 'DAO Admin', path: '/tokens', badge: 'ADMIN' }] : []),
+    { icon: Lock, label: 'Staking', path: '/staking', badge: 'BOOST' },
+    ...(publicKey && (publicKey.toString() === upgradeAuthority || (admin && publicKey.toString() === admin)) ? [{ icon: Coins, label: 'DAO Admin', path: '/dao-admin', badge: 'ADMIN' }] : []),
     { icon: Users, label: 'Community', path: '/community' },
-    { icon: FileText, label: 'Proposals', path: '/proposals', badge: 'NEW' },
     { icon: Shield, label: 'Privacy', path: '/privacy' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];

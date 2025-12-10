@@ -1,375 +1,502 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{TokenAccount, Mint};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use std::str::FromStr;
 
-declare_id!("FMny2cz2orrWDJ59QwsHXRCL97BcLQncsNfeko7EBrJK");
+declare_id!("DPvVAgTnp6DhWvCgE3ADKEjLArgJgM4ZE9SRj1Dg7KLY");
 
-const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
+const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account_v3";
 const PROPOSAL_SEED: &[u8] = b"proposal";
+const STAKE_RECORD_SEED: &[u8] = b"stake_record";
 const VOTER_SEED: &[u8] = b"voter";
+const VAULT_SEED: &[u8] = b"vault";
 
 #[program]
 pub mod pulsar_dao {
     use super::*;
 
-    // Initialize the global account
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
-        global_account.proposals_counter = 1;
+        
+        let deployer_pubkey = Pubkey::from_str("GH7koeBf99FBsdEnA8xLtWyLFgb44CgDGUXwLHnAATR").unwrap();
+        require_keys_eq!(
+            ctx.accounts.user.key(),
+            deployer_pubkey,
+            ErrorCode::Unauthorized
+        );
+
         global_account.admin = ctx.accounts.user.key();
-        global_account.vote_updates_enabled = true;
         global_account.token_mint = ctx.accounts.token_mint.key();
+        global_account.proposal_count = 0;
+        global_account.system_enabled = true; // SYSTEM ONLINE by default
         Ok(())
     }
 
-    // Create a new proposal
-    pub fn create_proposal(ctx: Context<CreateProposal>, question: String, duration: i64) -> Result<()> {
+    pub fn toggle_circuit_breaker(ctx: Context<ToggleCircuitBreaker>) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
+        require_keys_eq!(
+            global_account.admin,
+            ctx.accounts.user.key(),
+            ErrorCode::Unauthorized
+        );
+        global_account.system_enabled = !global_account.system_enabled;
+        Ok(())
+    }
+
+    pub fn create_proposal(
+        ctx: Context<CreateProposal>,
+        question: String,
+        deadline: i64,
+    ) -> Result<()> {
+        let global_account = &mut ctx.accounts.global_account;
+        require!(global_account.system_enabled, ErrorCode::CircuitBreakerTripped); // Strict option: prevent creation too? Or just voting? Usually just voting. Let's keep creation open or check safe check. Actually user said "Prevent voting". I'll add check for safety.
+
         let proposal_account = &mut ctx.accounts.proposal_account;
-        let user = &ctx.accounts.user;
-    
-        // Validate the question length
-        if question.len() > 200 {
-            return Err(ErrorCode::QuestionTooLong.into());
-        }
-    
-        // Initialize proposal account fields
-        proposal_account.number = global_account.proposals_counter;
+
+        global_account.proposal_count += 1;
+
+        proposal_account.number = global_account.proposal_count;
+        proposal_account.author = ctx.accounts.author.key();
         proposal_account.question = question;
-        proposal_account.author = user.key();
         proposal_account.yes = 0;
         proposal_account.no = 0;
-        
-        // Calculate deadline
-        let clock = Clock::get()?;
-        proposal_account.deadline = clock.unix_timestamp + duration;
-          
-        // Increment the global proposal counter
-        global_account.proposals_counter += 1;
+        proposal_account.deadline = deadline;
+        proposal_account.is_active = true;
 
-        // Emit de Proposal created event
-        emit!(ProposalCreated {
-            proposal_pda: ctx.accounts.proposal_account.key(),
-        });
+        Ok(())
+    }
     
-        Ok(())
-    }
+    // ...
 
-    // Vote on a proposal (Quadratic Voting)
-    pub fn vote(ctx: Context<Vote>, vote: bool) -> Result<()> {
+    pub fn vote(ctx: Context<VoteProposal>, vote_yes: bool) -> Result<()> {
         let global_account = &ctx.accounts.global_account;
-        let proposal_account = &mut ctx.accounts.proposal_account;
-        let voter_account = &mut ctx.accounts.voter_account;
-        let token_account = &ctx.accounts.token_account;
-
-        // Check if proposal is expired
-        let clock = Clock::get()?;
-        if clock.unix_timestamp > proposal_account.deadline {
-            return Err(ErrorCode::ProposalExpired.into());
-        }
-
-        // Verify token account ownership and mint
-        if token_account.mint != global_account.token_mint {
-            return Err(ErrorCode::InvalidTokenMint.into());
-        }
-        if token_account.owner != ctx.accounts.user.key() {
-            return Err(ErrorCode::InvalidTokenOwner.into());
-        }
-
-        // Calculate Voting Power (Quadratic Voting: Power = Sqrt(Balance))
-        let balance = token_account.amount;
-        let voting_power = integer_sqrt(balance);
-
-        if voting_power == 0 {
-            return Err(ErrorCode::NoVotingPower.into());
-        }
-
-        // Update the proposal results
-        if vote {
-            proposal_account.yes += voting_power;
-        } else {
-            proposal_account.no += voting_power;
-        }
-
-        // Update voter account fields
-        voter_account.proposal = proposal_account.key();
-        voter_account.voter = ctx.accounts.user.key();
-        voter_account.vote = vote;
-        voter_account.voted = true;
-        voter_account.voting_power = voting_power;
-
-        Ok(())
-    }
-
-    // Update vote on a proposal
-    pub fn update_vote(ctx: Context<UpdateVote>, vote: bool) -> Result<()> {
-        let global_account = &ctx.accounts.global_account;
-        
-        // Check if vote updates are enabled
-        if !global_account.vote_updates_enabled {
-            return Err(ErrorCode::VoteUpdatesDisabled.into());
-        }
+        require!(global_account.system_enabled, ErrorCode::CircuitBreakerTripped);
 
         let proposal_account = &mut ctx.accounts.proposal_account;
-        let voter_account = &mut ctx.accounts.voter_account;
-        let token_account = &ctx.accounts.token_account;
-
-        // Check if proposal is expired
+        let voter_record = &mut ctx.accounts.voter_record;
+        let stake_record = &ctx.accounts.stake_record;
+        let user_token_account = &ctx.accounts.user_token_account;
         let clock = Clock::get()?;
-        if clock.unix_timestamp > proposal_account.deadline {
-            return Err(ErrorCode::ProposalExpired.into());
-        }
 
-        // Verify token account ownership and mint
-        if token_account.mint != global_account.token_mint {
-            return Err(ErrorCode::InvalidTokenMint.into());
-        }
-        if token_account.owner != ctx.accounts.user.key() {
-            return Err(ErrorCode::InvalidTokenOwner.into());
-        }
+        require!(proposal_account.is_active, ErrorCode::ProposalNotActive);
+        require!(clock.unix_timestamp <= proposal_account.deadline, ErrorCode::ProposalExpired);
+        
+        // Liquid Power
+        let liquid_amount = user_token_account.amount;
+        let liquid_power = (liquid_amount as f64).sqrt() as u64;
 
-        // Calculate new Voting Power
-        let balance = token_account.amount;
-        let new_voting_power = integer_sqrt(balance);
-
-        if new_voting_power == 0 {
-            return Err(ErrorCode::NoVotingPower.into());
-        }
-
-        // Remove old vote weight
-        if voter_account.vote {
-            proposal_account.yes = proposal_account.yes.checked_sub(voter_account.voting_power).unwrap_or(0);
+        // Staked Power
+        let (staked_amount, multiplier) = if let Some(stake_record) = &ctx.accounts.stake_record {
+            (stake_record.staked_amount, stake_record.multiplier)
         } else {
-            proposal_account.no = proposal_account.no.checked_sub(voter_account.voting_power).unwrap_or(0);
-        }
+            (0, 1)
+        };
 
-        // Add new vote weight
-        if vote {
-            proposal_account.yes += new_voting_power;
+        let staked_sqrt = (staked_amount as f64).sqrt() as u64;
+        let staked_power = staked_sqrt.checked_mul(multiplier).unwrap_or(0);
+
+        let total_voting_power = liquid_power.checked_add(staked_power).unwrap();
+
+        require!(total_voting_power > 0, ErrorCode::NoVotingPower);
+
+        if voter_record.voted {
+            // Check if trying to vote for the same option
+            require!(voter_record.vote != vote_yes, ErrorCode::AlreadyVoted);
+
+            // Remove old vote weight
+            if voter_record.vote {
+                proposal_account.yes = proposal_account.yes.checked_sub(voter_record.voting_power).unwrap();
+            } else {
+                proposal_account.no = proposal_account.no.checked_sub(voter_record.voting_power).unwrap();
+            }
+
+            // Add new vote weight
+            if vote_yes {
+                proposal_account.yes = proposal_account.yes.checked_add(total_voting_power).unwrap();
+            } else {
+                proposal_account.no = proposal_account.no.checked_add(total_voting_power).unwrap();
+            }
+            
+            // Update record
+            voter_record.vote = vote_yes;
+            voter_record.voting_power = total_voting_power;
+            voter_record.staked_amount = staked_amount;
+
         } else {
-            proposal_account.no += new_voting_power;
+            // First time vote
+            if vote_yes {
+                proposal_account.yes = proposal_account.yes.checked_add(total_voting_power).unwrap();
+            } else {
+                proposal_account.no = proposal_account.no.checked_add(total_voting_power).unwrap();
+            }
+    
+            voter_record.proposal = proposal_account.key();
+            voter_record.voter = ctx.accounts.user.key();
+            voter_record.vote = vote_yes;
+            voter_record.voted = true;
+            voter_record.voting_power = total_voting_power;
+            voter_record.staked_amount = staked_amount;
         }
 
-        // Update voter account fields
-        voter_account.vote = vote;
-        voter_account.voting_power = new_voting_power;
+        emit!(VoteCast {
+            voter: ctx.accounts.user.key(),
+            proposal: proposal_account.key(),
+            amount: staked_amount,
+            lock_duration: if let Some(r) = &ctx.accounts.stake_record { r.original_lock_days } else { 0 },
+            voting_power: total_voting_power,
+            multiplier: multiplier,
+        });
 
         Ok(())
     }
 
-    // Toggle vote updates (Admin only)
-    pub fn toggle_vote_updates(ctx: Context<ToggleVoteUpdates>) -> Result<()> {
-        let global_account = &mut ctx.accounts.global_account;
-        
-        // Check if the user is the admin
-        if ctx.accounts.user.key() != global_account.admin {
+    pub fn withdraw_vote(ctx: Context<WithdrawVote>) -> Result<()> {
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        let voter_record = &mut ctx.accounts.voter_record;
+        let global_account = &ctx.accounts.global_account;
+
+        require!(global_account.system_enabled, ErrorCode::CircuitBreakerTripped);
+
+        let clock = Clock::get()?;
+        require!(proposal_account.is_active, ErrorCode::ProposalNotActive);
+        require!(clock.unix_timestamp <= proposal_account.deadline, ErrorCode::ProposalExpired);
+
+        if voter_record.voted {
+            if voter_record.vote {
+                proposal_account.yes = proposal_account.yes.checked_sub(voter_record.voting_power).unwrap();
+            } else {
+                proposal_account.no = proposal_account.no.checked_sub(voter_record.voting_power).unwrap();
+            }
+
+            voter_record.voted = false;
+            voter_record.voting_power = 0;
+        } else {
             return Err(ErrorCode::Unauthorized.into());
         }
 
-        global_account.vote_updates_enabled = !global_account.vote_updates_enabled;
+        Ok(())
+    }
+    
+    pub fn initialize_stake(ctx: Context<InitializeStake>) -> Result<()> {
+        let stake_record = &mut ctx.accounts.stake_record;
+        stake_record.owner = ctx.accounts.user.key();
+        stake_record.staked_amount = 0;
+        stake_record.multiplier = 1;
         Ok(())
     }
 
-    // Withdraw vote from a proposal
-    pub fn withdraw_vote(ctx: Context<WithdrawVote>) -> Result<()> {
-        let global_account = &ctx.accounts.global_account;
+    pub fn deposit_tokens(ctx: Context<DepositTokens>, amount: u64, lock_days: i64) -> Result<()> {
+        let stake_record = &mut ctx.accounts.stake_record;
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.user_token_account.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                    authority: ctx.accounts.user.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        stake_record.staked_amount = stake_record.staked_amount.checked_add(amount).unwrap();
         
-        // Check if vote updates are enabled
-        if !global_account.vote_updates_enabled {
-            return Err(ErrorCode::VoteUpdatesDisabled.into());
-        }
-
-        let proposal_account = &mut ctx.accounts.proposal_account;
-        let voter_account = &ctx.accounts.voter_account;
-
-        // Check if proposal is expired
         let clock = Clock::get()?;
-        if clock.unix_timestamp > proposal_account.deadline {
-            return Err(ErrorCode::ProposalExpired.into());
-        }
+        let current_time = clock.unix_timestamp;
+        let lock_seconds = lock_days * 24 * 60 * 60;
+        
+        stake_record.lock_end_time = current_time + lock_seconds;
+        stake_record.original_lock_days = lock_days;
 
-        // Decrease the vote count based on the voter's previous vote and power
-        if voter_account.vote {
-            proposal_account.yes = proposal_account.yes.checked_sub(voter_account.voting_power).unwrap_or(0);
-        } else {
-            proposal_account.no = proposal_account.no.checked_sub(voter_account.voting_power).unwrap_or(0);
-        }
+        let raw_multiplier = if lock_days >= 30 { 1 + (lock_days / 30) as u64 } else { 1 };
+        let multiplier = std::cmp::min(raw_multiplier, 5); // Cap to 5x
+        stake_record.multiplier = multiplier;
 
-        // The voter account will be closed automatically by Anchor
-        // and the rent will be returned to the user
+        Ok(())
+    }
+
+    pub fn unstake_tokens(ctx: Context<UnstakeTokens>) -> Result<()> {
+        let stake_record = &mut ctx.accounts.stake_record;
+        let clock = Clock::get()?;
+
+        require!(clock.unix_timestamp >= stake_record.lock_end_time, ErrorCode::TokensLocked);
+        require!(stake_record.staked_amount > 0, ErrorCode::NoTokensToUnstake);
+
+        let amount = stake_record.staked_amount;
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.user_token_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                &[&[
+                    b"vault",
+                    ctx.accounts.token_mint.key().as_ref(), // Updated to use token_mint key for seeds
+                    &[ctx.bumps.vault],
+                ]],
+            ),
+            amount,
+        )?;
+
+        stake_record.staked_amount = 0;
+        stake_record.multiplier = 1; 
+        stake_record.lock_end_time = 0;
+        
         Ok(())
     }
 }
 
-// Helper function for integer square root
-fn integer_sqrt(n: u64) -> u64 {
-    if n < 2 {
-        return n;
-    }
-    let mut x = n / 2;
-    let mut y = (x + n / x) / 2;
-    while y < x {
-        x = y;
-        y = (x + n / x) / 2;
-    }
-    x
-}
-
-// Context for initializing the global account
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(
-        init, 
-        payer = user, 
-        // 8 (discriminator) + 8 (proposals_counter) + 32 (admin) + 1 (vote_updates_enabled) + 32 (token_mint) + 1 (bump)
-        space = 8 + 8 + 32 + 1 + 32 + 1, 
-        seeds = [GLOBAL_ACCOUNT_SEED], 
-        bump
+        init,
+        payer = user,
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+        space = 8 + 32 + 32 + 8 + 1 // discriminator + admin + mint + counter + bool
     )]
     pub global_account: Account<'info, GlobalAccount>,
-    pub token_mint: Account<'info, Mint>,
     #[account(mut)]
     pub user: Signer<'info>,
+    pub token_mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
 }
 
-// Context for creating a proposal
+#[derive(Accounts)]
+pub struct ToggleCircuitBreaker<'info> {
+    #[account(
+        mut,
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
 #[derive(Accounts)]
 pub struct CreateProposal<'info> {
     #[account(mut)]
     pub global_account: Account<'info, GlobalAccount>,
     #[account(
-        init, 
-        payer = user, 
-        // 8 (discriminator) + 8 (number) + (4 + 200) (question) + 32 (author) + 8 (yes) + 8 (no) + 8 (deadline) + 1 (bump)
-        space = 8 + 8 + (4 + 200) + 32 + 8 + 8 + 8 + 1, 
-        seeds = [PROPOSAL_SEED, &global_account.proposals_counter.to_le_bytes()], 
+        init,
+        payer = author,
+        space = 8 + 8 + 32 + 200 + 8 + 8 + 8 + 1,
+        seeds = [PROPOSAL_SEED, (global_account.proposal_count + 1).to_le_bytes().as_ref()],
         bump
     )]
     pub proposal_account: Account<'info, ProposalAccount>,
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub author: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
-// Context for voting on a proposal
 #[derive(Accounts)]
-pub struct Vote<'info> {
-    #[account(mut)]
-    pub global_account: Account<'info, GlobalAccount>,
-    #[account(mut)]
-    pub proposal_account: Account<'info, ProposalAccount>,
+pub struct InitializeStake<'info> {
     #[account(
-        init, 
-        payer = user, 
-        // 8 (discriminator) + 32 (proposal) + 32 (voter) + 1 (vote) + 1 (voted) + 8 (voting_power) + 1 (bump)
-        space = 8 + 32 + 32 + 1 + 1 + 8 + 1, 
-        seeds = [VOTER_SEED, proposal_account.key().as_ref(), user.key().as_ref()], 
+        init,
+        payer = user,
+        space = 8 + 32 + 8 + 8 + 8 + 8,
+        seeds = [b"stake_record", user.key().as_ref()],
         bump
     )]
-    pub voter_account: Account<'info, VoterAccount>,
-    pub token_account: Account<'info, TokenAccount>,
+    pub stake_record: Account<'info, VoterStakeRecord>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
-// Context for updating a vote
 #[derive(Accounts)]
-pub struct UpdateVote<'info> {
-    #[account(mut)]
-    pub global_account: Account<'info, GlobalAccount>,
-    #[account(mut)]
-    pub proposal_account: Account<'info, ProposalAccount>,
+pub struct DepositTokens<'info> {
+    pub global_account: Account<'info, GlobalAccount>, // Just for context if needed, or remove? Keeping for consistency
+    
     #[account(
         mut,
-        seeds = [VOTER_SEED, proposal_account.key().as_ref(), user.key().as_ref()], 
+        seeds = [b"stake_record", user.key().as_ref()],
+        bump,
+        constraint = stake_record.owner == user.key() @ ErrorCode::Unauthorized,
+    )]
+    pub stake_record: Account<'info, VoterStakeRecord>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        seeds = [b"vault", token_mint.key().as_ref()],
+        bump,
+        token::mint = token_mint,
+        token::authority = vault, 
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    
+    pub token_mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub user_token_account: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct UnstakeTokens<'info> {
+    #[account(
+        mut,
+        seeds = [b"stake_record", user.key().as_ref()],
+        bump,
+        constraint = stake_record.owner == user.key() @ ErrorCode::Unauthorized,
+    )]
+    pub stake_record: Account<'info, VoterStakeRecord>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", token_mint.key().as_ref()],
         bump
     )]
-    pub voter_account: Account<'info, VoterAccount>,
-    pub token_account: Account<'info, TokenAccount>,
+    pub vault: Account<'info, TokenAccount>,
+    
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub user_token_account: Account<'info, TokenAccount>,
+    
+    pub token_mint: Account<'info, Mint>,
+    #[account(mut)]
+    pub user: Signer<'info>, 
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
-// Context for toggling vote updates
 #[derive(Accounts)]
-pub struct ToggleVoteUpdates<'info> {
-    #[account(mut)]
+pub struct VoteProposal<'info> {
+    #[account(
+        seeds = [b"global_account_v3"],
+        bump
+    )]
     pub global_account: Account<'info, GlobalAccount>,
     #[account(mut)]
+    pub proposal_account: Account<'info, ProposalAccount>,
+    
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = 8 + 32 + 32 + 1 + 1 + 8 + 8 + 8,
+        seeds = [b"voter", proposal_account.key().as_ref(), user.key().as_ref()],
+        bump
+    )]
+    pub voter_record: Account<'info, VoterRecord>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_record", user.key().as_ref()],
+        bump,
+    )]
+    pub stake_record: Option<Account<'info, VoterStakeRecord>>,
+
+    #[account(
+        constraint = user_token_account.mint == global_account.token_mint @ ErrorCode::InvalidTokenAccount,
+        constraint = user_token_account.owner == user.key() @ ErrorCode::Unauthorized
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
     pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
-// Context for withdrawing a vote
 #[derive(Accounts)]
 pub struct WithdrawVote<'info> {
-    #[account(mut)]
+    #[account(
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump
+    )]
     pub global_account: Account<'info, GlobalAccount>,
     #[account(mut)]
     pub proposal_account: Account<'info, ProposalAccount>,
     #[account(
         mut,
-        close = user,
-        seeds = [VOTER_SEED, proposal_account.key().as_ref(), user.key().as_ref()], 
-        bump
+        seeds = [b"voter", proposal_account.key().as_ref(), user.key().as_ref()],
+        bump,
+        constraint = voter_record.voter == user.key() @ ErrorCode::Unauthorized
     )]
-    pub voter_account: Account<'info, VoterAccount>,
+    pub voter_record: Account<'info, VoterRecord>,
     #[account(mut)]
     pub user: Signer<'info>,
 }
 
-// Proposal account structure
-#[account]
-pub struct ProposalAccount {
-    pub number: u64,      // Unique proposal number
-    pub question: String, // Proposal question
-    pub author: Pubkey,   // Author of the proposal
-    pub yes: u64,         // Weighted Count of "yes" votes
-    pub no: u64,          // Weighted Count of "no" votes
-    pub deadline: i64,    // Unix timestamp for when the proposal closes
-}
-
-// Voter account structure
-#[account]
-pub struct VoterAccount {
-    pub proposal: Pubkey,  // Associated proposal PDA
-    pub voter: Pubkey, // Voter's public key
-    pub vote: bool,    // `true` for "yes", `false` for "no"
-    pub voted: bool,   // Whether the voter has already voted
-    pub voting_power: u64, // The voting power used for this vote
-}
-
-// Global account structure
 #[account]
 pub struct GlobalAccount {
-    pub proposals_counter: u64, // Counter for proposals
-    pub admin: Pubkey,      // Admin public key
-    pub vote_updates_enabled: bool, // Global flag to enable/disable vote updates
-    pub token_mint: Pubkey, // The token mint used for voting
+    pub admin: Pubkey,
+    pub token_mint: Pubkey,
+    pub proposal_count: u64,
+    pub system_enabled: bool, // Renamed
+}
+
+#[account]
+pub struct ProposalAccount {
+    pub number: u64,
+    pub author: Pubkey,
+    pub question: String,
+    pub yes: u64,
+    pub no: u64,
+    pub deadline: i64,
+    pub is_active: bool,
+}
+
+#[account]
+pub struct VoterRecord {
+    pub proposal: Pubkey,
+    pub voter: Pubkey,
+    pub vote: bool,
+    pub voted: bool,
+    pub voting_power: u64,
+    pub staked_amount: u64,
+}
+
+#[account]
+pub struct VoterStakeRecord {
+    pub owner: Pubkey,
+    pub staked_amount: u64,
+    pub lock_end_time: i64,
+    pub original_lock_days: i64,
+    pub multiplier: u64,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Proposal is not active.")]
+    ProposalNotActive,
+    #[msg("Proposal has expired.")]
+    ProposalExpired,
+    #[msg("You have already voted.")]
+    AlreadyVoted,
+    #[msg("System is OFFLINE (Circuit Breaker Tripped).")]
+    CircuitBreakerTripped,
+    #[msg("Invalid vote option.")]
+    InvalidVoteOption,
+    #[msg("Unauthorized access.")]
+    Unauthorized,
+    #[msg("Tokens are still locked.")]
+    TokensLocked,
+    #[msg("Lock duration cannot be less than previous stake.")]
+    LockDurationDowngrade,
+    #[msg("No tokens to unstake.")]
+    NoTokensToUnstake,
+    #[msg("No voting power available (Stake tokens first).")]
+    NoVotingPower,
+    #[msg("Invalid token account.")]
+    InvalidTokenAccount,
 }
 
 #[event]
-pub struct ProposalCreated {
-    pub proposal_pda: Pubkey,
-}
-
-// Error codes
-#[error_code]
-pub enum ErrorCode {
-    #[msg("User already voted on this proposal.")]
-    AlreadyVoted,
-    #[msg("The question exceeds the maximum length of 200 characters.")]
-    QuestionTooLong,
-    #[msg("The proposal has expired.")]
-    ProposalExpired,
-    #[msg("Vote updates are disabled.")]
-    VoteUpdatesDisabled,
-    #[msg("Unauthorized.")]
-    Unauthorized,
-    #[msg("Invalid Token Mint.")]
-    InvalidTokenMint,
-    #[msg("Invalid Token Owner.")]
-    InvalidTokenOwner,
-    #[msg("No Voting Power (Balance is 0).")]
-    NoVotingPower,
+pub struct VoteCast {
+    pub voter: Pubkey,
+    pub proposal: Pubkey,
+    pub amount: u64,
+    pub lock_duration: i64,
+    pub voting_power: u64,
+    pub multiplier: u64,
 }

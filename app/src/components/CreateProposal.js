@@ -4,12 +4,15 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { SystemProgram, PublicKey } from '@solana/web3.js';
 import { connection, program, globalAccountPDAAddress, proposalSeed, programId } from '../config';
 import { BN } from 'bn.js';
+import { Loader2, CheckCircle } from 'lucide-react';
 
 const CreateProposal = () => {
+    // ... (state vars) 
   const { publicKey, sendTransaction } = useWallet();
   const [proposalQuestion, setProposalQuestion] = useState('');
   const [duration, setDuration] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [createSuccess, setCreateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
 
@@ -50,20 +53,24 @@ const CreateProposal = () => {
         return;
       }
 
-      const proposalsCounter = Number(globalAccount.proposalsCounter.toString());
+      const proposalsCounter = Number(globalAccount.proposalCount.toString());
 
-      // Derive the proposal PDA
       const [proposalPDAAddress] = await PublicKey.findProgramAddress(
-        [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(proposalsCounter))],
+        [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(proposalsCounter + 1))],
         programId
       );
 
+      // Contract expects an absolute timestamp (deadline), not duration.
+      // So we calculate: Now (seconds) + Duration (seconds)
+      const now = Math.floor(Date.now() / 1000);
+      const deadlineTimestamp = new BN(now + (duration * 60));
+
       const transaction = await votingProgram.methods
-        .createProposal(proposalQuestion, new BN(duration * 60))
+        .createProposal(proposalQuestion, deadlineTimestamp)
         .accounts({
           globalAccount: globalAccountPDAAddress,
           proposalAccount: proposalPDAAddress,
-          user: publicKey,
+          author: publicKey,
           systemProgram: SystemProgram.programId,
         })
         .transaction();
@@ -78,20 +85,42 @@ const CreateProposal = () => {
           lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         },
         'finalized'
-      );
+      );      
+      // Success Transition
+      setLoading(false);
+      setCreateSuccess(true);
+      setTimeout(() => {
+            navigate(`/proposal/${proposalsCounter + 1}`);
+      }, 2000);
 
-      console.log('Transaction confirmed.');
-      navigate('/');
     } catch (error) {
       console.error('Failed to create new proposal:', error);
       setErrorMessage('Failed to create new proposal: ' + error.message);
-    } finally {
       setLoading(false);
     }
   };
-
+  
   return (
-    <div className="bg-[#0f1117] rounded-2xl p-8 border border-white/10 backdrop-blur-sm max-w-2xl mx-auto">
+    <div className="bg-[#0f1117] rounded-2xl p-8 border border-white/10 backdrop-blur-sm max-w-2xl mx-auto relative overflow-hidden">
+      {/* Loading Overlay */}
+      {(loading || createSuccess) && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center animate-in fade-in duration-300">
+              {createSuccess ? (
+                  <>
+                     <CheckCircle className="w-16 h-16 text-[#14F195] mb-6 animate-bounce" />
+                     <h3 className="text-2xl font-bold text-white mb-2 tracking-wide">Proposal Created!</h3>
+                     <p className="text-gray-400 text-sm animate-pulse">Redirecting to proposal...</p>
+                  </>
+              ) : (
+                  <>
+                    <Loader2 className="w-16 h-16 text-[#14F195] animate-spin mb-6" />
+                    <h3 className="text-2xl font-bold text-white mb-2 tracking-wide">Creating Proposal</h3>
+                    <p className="text-gray-400 text-sm animate-pulse">Confirming transaction on blockchain...</p>
+                  </>
+              )}
+          </div>
+      )}
+
       <h2 className="text-3xl font-bold text-white mb-6 bg-gradient-to-r from-[#14F195] to-[#9945FF] bg-clip-text text-transparent">
         Create New Proposal
       </h2>

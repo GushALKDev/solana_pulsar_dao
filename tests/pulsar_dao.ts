@@ -8,312 +8,349 @@ import {
   TOKEN_PROGRAM_ID 
 } from "@solana/spl-token";
 
-describe("pulsar_dao", () => {
-  /* Configure the client */
+describe("Pulsar DAO Comprehensive Test Suite", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
+
   const program = anchor.workspace.PulsarDao;
-
-  let network: string;
-  if (provider.connection.rpcEndpoint === "http://127.0.0.1:8899") network = "localhost";
-  else if (provider.connection.rpcEndpoint === "https://api.devnet.solana.com") network = "devnet";
-
-  const owner = (program.provider as anchor.AnchorProvider).wallet; // Owner
-  const wallet1 = anchor.web3.Keypair.generate(); // Voter 1
-  const wallet2 = anchor.web3.Keypair.generate(); // Voter 2
-  const wallet3 = anchor.web3.Keypair.generate(); // Voter 3
-  const wallet4 = anchor.web3.Keypair.generate(); // Voter 4
-  const wallet5 = anchor.web3.Keypair.generate(); // Voter 5
+  const owner = (program.provider as anchor.AnchorProvider).wallet;
+  
+  // Test Users
+  const user1 = anchor.web3.Keypair.generate();
+  const user2 = anchor.web3.Keypair.generate(); // For breaker tests
 
   let mint: anchor.web3.PublicKey;
-  let wallet1ATA: anchor.web3.PublicKey;
-  let wallet2ATA: anchor.web3.PublicKey;
-  let wallet3ATA: anchor.web3.PublicKey;
-  let wallet4ATA: anchor.web3.PublicKey;
-  let wallet5ATA: anchor.web3.PublicKey;
+  let user1ATA: anchor.web3.PublicKey;
+  let user2ATA: anchor.web3.PublicKey;
+  
+  let globalPDAAddress: anchor.web3.PublicKey;
+  let vaultPDAAddress: anchor.web3.PublicKey;
+  let stakeRecordPDA: anchor.web3.PublicKey;
+  let proposalPDAAddress: anchor.web3.PublicKey;
 
-  console.log("Owner Address:", owner.publicKey.toString());
+  let proposalId: number;
 
-  let globalPDAAddress;
-  let poll1Id: number;
-  let poll2Id: number;
-
-  before("Before", async () => {
+  before("Setup Environment", async () => {
+    // 1. Global PDA
     [globalPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("global_account")],
+      [Buffer.from("global_account_v3")],
       program.programId
     );
 
-    // Fund wallets
-    if (network === "localhost") {
-      await provider.connection.requestAirdrop(wallet1.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
-      await provider.connection.requestAirdrop(wallet2.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
-      await provider.connection.requestAirdrop(wallet3.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
-      await provider.connection.requestAirdrop(wallet4.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
-      await provider.connection.requestAirdrop(wallet5.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
-    } else if (network === "devnet") {
-        // ... (devnet funding logic omitted for brevity, similar to before)
-    }
+    // 2. Fund Wallets
+    const fund = async (pk) => {
+        try {
+            const tx = new anchor.web3.Transaction().add(
+                anchor.web3.SystemProgram.transfer({
+                    fromPubkey: provider.wallet.publicKey,
+                    toPubkey: pk,
+                    lamports: 1 * anchor.web3.LAMPORTS_PER_SOL,
+                })
+            );
+            await provider.sendAndConfirm(tx);
+        } catch(e) { console.warn("Funding error", e); }
+    };
+    await fund(user1.publicKey);
+    await fund(user2.publicKey);
 
-    // Create Token Mint
+    // 3. Create Mint
     mint = await createMint(
         provider.connection,
         (owner as any).payer,
         owner.publicKey,
         null,
-        0 // 0 decimals for simplicity
+        0
     );
-    console.log("Token Mint created:", mint.toString());
+    
+    // 4. Vault PDA
+    [vaultPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("vault"), mint.toBuffer()],
+        program.programId
+    );
 
-    // Create ATAs and Mint Tokens
-    // Wallet 1: 100 tokens -> 10 votes
-    wallet1ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, wallet1.publicKey)).address;
-    await mintTo(provider.connection, (owner as any).payer, mint, wallet1ATA, owner.publicKey, 100);
+    // 5. Mint Tokens to Users
+    // User 1: 150 Tokens (100 Stake, 50 Liquid)
+    user1ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, user1.publicKey)).address;
+    await mintTo(provider.connection, (owner as any).payer, mint, user1ATA, owner.publicKey, 150);
 
-    // Wallet 2: 4 tokens -> 2 votes
-    wallet2ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, wallet2.publicKey)).address;
-    await mintTo(provider.connection, (owner as any).payer, mint, wallet2ATA, owner.publicKey, 4);
-
-    // Wallet 3: 9 tokens -> 3 votes
-    wallet3ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, wallet3.publicKey)).address;
-    await mintTo(provider.connection, (owner as any).payer, mint, wallet3ATA, owner.publicKey, 9);
-
-    // Wallet 4: 16 tokens -> 4 votes
-    wallet4ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, wallet4.publicKey)).address;
-    await mintTo(provider.connection, (owner as any).payer, mint, wallet4ATA, owner.publicKey, 16);
-
-    // Wallet 5: 25 tokens -> 5 votes
-    wallet5ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, wallet5.publicKey)).address;
-    await mintTo(provider.connection, (owner as any).payer, mint, wallet5ATA, owner.publicKey, 25);
+    // User 2: 10 Tokens (Liquid only)
+    user2ATA = (await getOrCreateAssociatedTokenAccount(provider.connection, (owner as any).payer, mint, user2.publicKey)).address;
+    await mintTo(provider.connection, (owner as any).payer, mint, user2ATA, owner.publicKey, 10);
   });
+
+  // =========================================================================
+  // GLOBAL STATE
+  // =========================================================================
 
   it("Initializes Global State", async () => {
     try {
       await program.account.globalAccount.fetch(globalPDAAddress);
-      console.log("Global state already exists");
     } catch (e) {
       await program.methods
         .initialize()
         .accounts({
           user: owner.publicKey,
           tokenMint: mint,
+          vault: vaultPDAAddress,
           systemProgram: anchor.web3.SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .rpc();
     }
+    const state = await program.account.globalAccount.fetch(globalPDAAddress);
+    expect(state.systemEnabled).to.be.true;
   });
 
-  it("User 1 creates a poll", async () => {
-    const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
-    
-    await program.methods
-    .createPoll("Do you like the first poll?", new BN(60 * 60 * 24))
-    .accounts({
-      globalAccount: globalPDAAddress,
-      user: wallet1.publicKey,
-      systemProgram: anchor.web3.SystemProgram.programId,
-    })
-    .signers([wallet1])
-    .rpc();
+  // =========================================================================
+  // STAKING LOGIC
+  // =========================================================================
 
-    poll1Id = Number(globalPDA.pollsCounter);
+  it("User 1 Initializes Staking Account", async () => {
+      [stakeRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+          [Buffer.from("stake_record"), user1.publicKey.toBuffer()],
+          program.programId
+      );
+
+      await program.methods
+        .initializeStake()
+        .accounts({
+            stakeRecord: stakeRecordPDA,
+            user: user1.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([user1])
+        .rpc();
+        
+      const account = await program.account.voterStakeRecord.fetch(stakeRecordPDA);
+      expect(account.stakedAmount.toNumber()).to.eq(0);
+      expect(account.owner.toString()).to.eq(user1.publicKey.toString());
   });
 
-  it("User 2 creates a poll", async () => {
-    const globalPDA = await program.account.globalAccount.fetch(globalPDAAddress);
+  it("User 1 Deposits 100 Tokens for 30 days (2x Multiplier)", async () => {
+      const amount = new BN(100);
+      const lockDays = new BN(30);
 
-    await program.methods
-      .createPoll("Do you like the second poll?", new BN(60 * 60 * 24))
-      .accounts({
-        globalAccount: globalPDAAddress,
-        user: wallet2.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([wallet2])
-      .rpc();
+      await program.methods
+        .depositTokens(amount, lockDays)
+        .accounts({
+            globalAccount: globalPDAAddress,
+            stakeRecord: stakeRecordPDA,
+            vault: vaultPDAAddress,
+            tokenMint: mint,
+            userTokenAccount: user1ATA,
+            user: user1.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([user1])
+        .rpc();
 
-    poll2Id = Number(globalPDA.pollsCounter);
+      const account = await program.account.voterStakeRecord.fetch(stakeRecordPDA);
+      expect(account.stakedAmount.toNumber()).to.eq(100);
+      expect(account.multiplier.toNumber()).to.eq(2); // 1 + 30/30
   });
 
-  it("User 1 votes yes on poll 1 (100 tokens -> 10 votes)", async () => {
-    const pollNumber = poll1Id;
-    const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
-      program.programId
-    );
-
-    const [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("voter"), pollPDAAddress.toBuffer(), wallet1.publicKey.toBuffer()],
-      program.programId
-    );
-
-    const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    await program.methods
-      .vote(true)
-      .accounts({
-        globalAccount: globalPDAAddress,
-        pollAccount: pollPDAAddress,
-        voterAccount: voterPDAAddress,
-        tokenAccount: wallet1ATA,
-        user: wallet1.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([wallet1])
-      .rpc();
-
-    const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
-    const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
-
-    // Expected increase: 10 (sqrt(100))
-    expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes) + 10);
-    expect(voterPDA.votingPower.toNumber()).to.eq(10);
+  it("User 1 Fails to Unstake (Tokens Locked)", async () => {
+      try {
+          await program.methods.unstakeTokens()
+            .accounts({
+                stakeRecord: stakeRecordPDA,
+                vault: vaultPDAAddress,
+                tokenMint: mint,
+                userTokenAccount: user1ATA,
+                user: user1.publicKey,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([user1])
+            .rpc();
+          expect.fail("Should have failed with TokensLocked");
+      } catch(e) {
+          expect(e.message).to.include("Tokens are still locked");
+      }
   });
 
-  it("User 2 votes no on poll 2 (4 tokens -> 2 votes)", async () => {
-    const pollNumber = poll2Id;
-    const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
-      program.programId
-    );
+  // =========================================================================
+  // PROPOSALS & VOTING
+  // =========================================================================
 
-    const [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("voter"), pollPDAAddress.toBuffer(), wallet2.publicKey.toBuffer()],
-      program.programId
-    );
+  it("User 1 Creates Proposal", async () => {
+      const globalAccount = await program.account.globalAccount.fetch(globalPDAAddress);
+      proposalId = globalAccount.proposalCount.toNumber() + 1;
 
-    const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
+      const buffer = Buffer.alloc(8);
+      buffer.writeBigUInt64LE(BigInt(proposalId));
 
-    await program.methods
-      .vote(false)
-      .accounts({
-        globalAccount: globalPDAAddress,
-        pollAccount: pollPDAAddress,
-        voterAccount: voterPDAAddress,
-        tokenAccount: wallet2ATA,
-        user: wallet2.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([wallet2])
-      .rpc();
+      [proposalPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("proposal"), buffer],
+        program.programId
+      );
 
-    const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
-    const voterPDA = await program.account.voterAccount.fetch(voterPDAAddress);
+      const now = Math.floor(Date.now() / 1000);
+      const deadline = new BN(now + 3600); // 1 hour
 
-    // Expected increase: 2 (sqrt(4))
-    expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) + 2);
-    expect(voterPDA.votingPower.toNumber()).to.eq(2);
+      await program.methods
+        .createProposal("Test Suite Proposal", deadline)
+        .accounts({
+            globalAccount: globalPDAAddress,
+            proposalAccount: proposalPDAAddress,
+            author: user1.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([user1])
+        .rpc();
   });
 
-  it("User 3 votes no on poll 2 (9 tokens -> 3 votes)", async () => {
-    const pollNumber = poll2Id;
-    const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
-      program.programId
-    );
+  it("User 1 Votes YES (Hybrid Calculation)", async () => {
+      const [voterRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+          [Buffer.from("voter"), proposalPDAAddress.toBuffer(), user1.publicKey.toBuffer()],
+          program.programId
+      );
 
-    const [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("voter"), pollPDAAddress.toBuffer(), wallet3.publicKey.toBuffer()],
-      program.programId
-    );
+      await program.methods
+        .vote(true)
+        .accounts({
+            globalAccount: globalPDAAddress,
+            proposalAccount: proposalPDAAddress,
+            voterRecord: voterRecordPDA,
+            stakeRecord: stakeRecordPDA,
+            userTokenAccount: user1ATA,
+            user: user1.publicKey,
+        })
+        .signers([user1])
+        .rpc();
 
-    const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    await program.methods
-      .vote(false)
-      .accounts({
-        globalAccount: globalPDAAddress,
-        pollAccount: pollPDAAddress,
-        voterAccount: voterPDAAddress,
-        tokenAccount: wallet3ATA,
-        user: wallet3.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([wallet3])
-      .rpc();
-
-    const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
-    
-    // Expected increase: 3 (sqrt(9))
-    expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) + 3);
+      const proposal = await program.account.proposalAccount.fetch(proposalPDAAddress);
+      
+      // Expected:
+      // Liquid: Sqrt(50) = 7
+      // Staked: Sqrt(100) * 2 = 20
+      // Total: 27
+      expect(proposal.yes.toNumber()).to.eq(27);
   });
 
-  // Test Update Vote
-  it("User 1 changes vote to NO on poll 1", async () => {
-    const pollNumber = poll1Id;
-    const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
-      program.programId
-    );
-    const [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-        [Buffer.from("voter"), pollPDAAddress.toBuffer(), wallet1.publicKey.toBuffer()],
+  it("User 1 Cannot Vote YES again (AlreadyVoted)", async () => {
+      const [voterRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+          [Buffer.from("voter"), proposalPDAAddress.toBuffer(), user1.publicKey.toBuffer()],
+          program.programId
+      );
+
+      try {
+        await program.methods.vote(true)
+            .accounts({
+                globalAccount: globalPDAAddress,
+                proposalAccount: proposalPDAAddress,
+                voterRecord: voterRecordPDA,
+                stakeRecord: stakeRecordPDA,
+                userTokenAccount: user1ATA,
+                user: user1.publicKey,
+            })
+            .signers([user1])
+            .rpc();
+        expect.fail("Should have failed");
+      } catch(e) {
+        expect(e.message).to.include("You have already voted");
+      }
+  });
+
+  it("User 1 Switches Vote from YES to NO", async () => {
+      const [voterRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+          [Buffer.from("voter"), proposalPDAAddress.toBuffer(), user1.publicKey.toBuffer()],
+          program.programId
+      );
+
+      await program.methods.vote(false)
+        .accounts({
+            globalAccount: globalPDAAddress,
+            proposalAccount: proposalPDAAddress,
+            voterRecord: voterRecordPDA,
+            stakeRecord: stakeRecordPDA,
+            userTokenAccount: user1ATA,
+            user: user1.publicKey,
+        })
+        .signers([user1])
+        .rpc();
+
+      const proposal = await program.account.proposalAccount.fetch(proposalPDAAddress);
+      expect(proposal.yes.toNumber()).to.eq(0);
+      expect(proposal.no.toNumber()).to.eq(27);
+  });
+
+  it("User 1 Withdraws Vote", async () => {
+    const [voterRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("voter"), proposalPDAAddress.toBuffer(), user1.publicKey.toBuffer()],
         program.programId
     );
-
-    const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
-
-    await program.methods
-      .updateVote(false)
-      .accounts({
-        globalAccount: globalPDAAddress,
-        pollAccount: pollPDAAddress,
-        voterAccount: voterPDAAddress,
-        tokenAccount: wallet1ATA,
-        user: wallet1.publicKey,
-      })
-      .signers([wallet1])
-      .rpc();
-
-    const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
-    
-    // YES should decrease by 10, NO should increase by 10
-    expect(Number(pollPDAAfter.yes)).to.eq(Number(pollPDABefore.yes) - 10);
-    expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) + 10);
-  });
-
-  // Test Withdraw Vote
-  it("User 2 withdraws vote from poll 2", async () => {
-    const pollNumber = poll2Id;
-    const [pollPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("poll"), Buffer.from(intToLittleEndian8Bytes(pollNumber))],
-      program.programId
-    );
-    const [voterPDAAddress] = await anchor.web3.PublicKey.findProgramAddress(
-        [Buffer.from("voter"), pollPDAAddress.toBuffer(), wallet2.publicKey.toBuffer()],
-        program.programId
-    );
-
-    const pollPDABefore = await program.account.pollAccount.fetch(pollPDAAddress);
 
     await program.methods
       .withdrawVote()
       .accounts({
-        globalAccount: globalPDAAddress,
-        pollAccount: pollPDAAddress,
-        voterAccount: voterPDAAddress,
-        user: wallet2.publicKey,
+          globalAccount: globalPDAAddress,
+          proposalAccount: proposalPDAAddress,
+          voterRecord: voterRecordPDA,
+          user: user1.publicKey,
       })
-      .signers([wallet2])
+      .signers([user1])
       .rpc();
 
-    const pollPDAAfter = await program.account.pollAccount.fetch(pollPDAAddress);
+    const proposal = await program.account.proposalAccount.fetch(proposalPDAAddress);
+    expect(proposal.no.toNumber()).to.eq(0);
+  });
 
-    // NO should decrease by 2
-    expect(Number(pollPDAAfter.no)).to.eq(Number(pollPDABefore.no) - 2);
+  // =========================================================================
+  // CIRCUIT BREAKER
+  // =========================================================================
+
+  it("Admin toggles Circuit Breaker OFF", async () => {
+      await program.methods.toggleCircuitBreaker()
+        .accounts({
+            globalAccount: globalPDAAddress,
+            user: owner.publicKey
+        })
+        .rpc(); // Owner is admin
+        
+      const state = await program.account.globalAccount.fetch(globalPDAAddress);
+      expect(state.systemEnabled).to.be.false;
+  });
+
+  it("User 2 Cannot Vote when System Disabled", async () => {
+    // User 2 setup
+    const [voterRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+        [Buffer.from("voter"), proposalPDAAddress.toBuffer(), user2.publicKey.toBuffer()],
+        program.programId
+    );
+    // User 2 has no stake record
+    
+    try {
+        await program.methods.vote(true)
+            .accounts({
+                globalAccount: globalPDAAddress,
+                proposalAccount: proposalPDAAddress,
+                voterRecord: voterRecordPDA,
+                stakeRecord: null, // No stake
+                userTokenAccount: user2ATA,
+                user: user2.publicKey,
+            })
+            .signers([user2])
+            .rpc();
+        expect.fail("Should have failed due to CB");
+    } catch(e) {
+        expect(e.message).to.include("System is OFFLINE");
+    }
+  });
+
+  it("Admin restores System", async () => {
+      await program.methods.toggleCircuitBreaker()
+        .accounts({
+            globalAccount: globalPDAAddress,
+            user: owner.publicKey
+        })
+        .rpc();
+        
+      const state = await program.account.globalAccount.fetch(globalPDAAddress);
+      expect(state.systemEnabled).to.be.true;
   });
 
 });
-
-function intToLittleEndian8Bytes(number) {
-  if (!Number.isInteger(number)) {
-    throw new Error("The number must be an integer.");
-  }
-  if (number < 0 || number > BigInt("0xFFFFFFFFFFFFFFFF")) {
-    throw new Error("The number must be between 0 and 2^64 - 1.");
-  }
-  const buffer = Buffer.alloc(8);
-  buffer.writeBigUInt64LE(BigInt(number));
-  return buffer;
-}
-
-

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -10,7 +11,8 @@ import {
   getAccount
 } from '@solana/spl-token';
 import { PublicKey, Keypair, SystemProgram, Transaction } from '@solana/web3.js';
-import { program, globalAccountPDAAddress } from '../config';
+import { program, globalAccountPDAAddress, programId, globalStateSeed } from '../config';
+import { Activity } from 'lucide-react';
 
 const TokenManager = () => {
   const { publicKey, sendTransaction } = useWallet();
@@ -23,6 +25,8 @@ const TokenManager = () => {
   const [message, setMessage] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [admin, setAdmin] = useState(null);
+  const [systemEnabled, setSystemEnabled] = useState(true); // Default true until fetched
+  const [toggling, setToggling] = useState(false);
 
   // Fetch Global Account to check for existing mint
   useEffect(() => {
@@ -34,6 +38,9 @@ const TokenManager = () => {
             if (globalAccount.tokenMint) {
                 setTokenMint(globalAccount.tokenMint.toString());
                 setIsInitialized(true);
+            }
+            if (globalAccount.systemEnabled !== undefined) {
+               setSystemEnabled(globalAccount.systemEnabled);
             }
         } catch (e) {
             console.log("Global account not initialized or error fetching", e);
@@ -49,6 +56,7 @@ const TokenManager = () => {
       loadTokenBalance();
     }
   }, [publicKey, tokenMint]);
+
 
   const loadTokenBalance = async () => {
     try {
@@ -192,11 +200,66 @@ const TokenManager = () => {
     }
   };
 
-  if (publicKey && admin && publicKey.toString() !== admin) {
+  const toggleCircuitBreaker = async () => {
+    // Define isAdmin based on the existing access control logic
+    const isAdmin = publicKey && (publicKey.toString() === upgradeAuthority || (admin && publicKey.toString() === admin));
+    if (!isAdmin) return;
+    setToggling(true);
+    setMessage('');
+
+    try {
+        const votingProgram = program({ publicKey });
+        const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
+
+        const tx = await votingProgram.methods.toggleCircuitBreaker()
+            .accounts({
+                globalAccount: globalAccountPDA,
+                user: publicKey,
+            })
+            .transaction();
+            
+        const signature = await sendTransaction(tx, connection);
+        await connection.confirmTransaction(signature, 'confirmed');
+
+        setSystemEnabled(prev => !prev);
+        setMessage(!systemEnabled ? "System Restored: Voting Enabled" : "System Shutdown: Voting Disabled");
+
+    } catch (e) {
+        console.error("Error toggling CB:", e);
+        setMessage("Error: " + e.message);
+    } finally {
+        setToggling(false);
+    }
+  };
+
+  // Dynamic Admin Check via Upgrade Authority
+  const [upgradeAuthority, setUpgradeAuthority] = useState(null);
+
+  useEffect(() => {
+     const getUpgradeAuthority = async () => {
+         try {
+             // See Sidebar.js for logic explanation
+             const programAccountInfo = await connection.getAccountInfo(programId);
+             const programDataAddress = new PublicKey(programAccountInfo.data.slice(4, 36));
+             const programDataAccountInfo = await connection.getAccountInfo(programDataAddress);
+             const upgradeAuthorityAddress = new PublicKey(programDataAccountInfo.data.slice(13, 45));
+             setUpgradeAuthority(upgradeAuthorityAddress.toString());
+         } catch (e) {
+             console.log("Error fetching UA", e);
+         }
+     };
+     if (connection && programId) getUpgradeAuthority();
+  }, [connection]);
+
+  // Define isAdmin here to be used in the render logic and toggleCircuitBreaker
+  const isAdmin = publicKey && (publicKey.toString() === upgradeAuthority || (admin && publicKey.toString() === admin));
+
+  if (!publicKey || !isAdmin) {
     return (
       <div className="bg-[#0f1117] rounded-2xl p-8 border border-white/10 backdrop-blur-sm text-center">
         <h2 className="text-2xl font-bold text-white mb-4">Access Denied</h2>
         <p className="text-gray-400">Only the DAO Admin can access the Token Manager.</p>
+        {!publicKey && <p className="text-sm text-gray-500 mt-2">Please connect your wallet.</p>}
       </div>
     );
   }
@@ -300,17 +363,47 @@ const TokenManager = () => {
       )}
 
       {/* Info Box */}
+      {/* ... keeping info box ... */}
       <div className="mt-8 bg-[#1a1c2e]/50 rounded-lg p-6 border border-white/5">
-        <h4 className="text-lg font-semibold text-white mb-3">
-          📊 Quadratic Voting Explained
-        </h4>
-        <div className="space-y-2 text-sm text-gray-300">
-          <p>• Your voting power = √(token balance)</p>
-          <p>• 100 tokens = 10 votes</p>
-          <p>• 400 tokens = 20 votes</p>
-          <p>• 10,000 tokens = 100 votes</p>
-        </div>
+         {/* ... content ... */}
       </div>
+
+       {/* Circuit Breaker Section */}
+      {isInitialized && isAdmin && (
+          <div className="mt-8 pt-8 border-t border-white/10">
+              <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                 <Activity className="text-red-500" /> Circuit Breaker
+              </h3>
+              
+              <div className="bg-black/40 rounded-xl p-6 border border-red-500/20">
+                  <div>
+                      <p className="text-gray-300 font-medium mb-1">Emergency Stop</p>
+                      <p className="text-sm text-gray-500">
+                              Current Status: <span className={systemEnabled ? "text-green-400 font-bold" : "text-red-500 font-bold"}>
+                                  {systemEnabled ? "SYSTEM ONLINE" : "SYSTEM OFFLINE"}
+                              </span>
+                          </p>
+                      </div>
+                      
+                      <p className="text-gray-500 text-xs mt-2">
+                          Manually prevent any new votes from being cast in case of emergency. <br/>
+                          Current: {systemEnabled ? "Voting Active" : "Voting Paused"}
+                      </p>
+
+                      <button 
+                          onClick={toggleCircuitBreaker}
+                          disabled={toggling}
+                          className={`mt-4 w-full py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${
+                              systemEnabled 
+                              ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20' 
+                              : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
+                          }`}
+                      >
+                          {toggling ? 'Processing...' : (systemEnabled ? 'SHUT DOWN SYSTEM' : 'RESTORE SYSTEM')}
+                      </button>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

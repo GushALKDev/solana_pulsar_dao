@@ -1,5 +1,5 @@
 {
-  "address": "FMny2cz2orrWDJ59QwsHXRCL97BcLQncsNfeko7EBrJK",
+  "address": "DPvVAgTnp6DhWvCgE3ADKEjLArgJgM4ZE9SRj1Dg7KLY",
   "metadata": {
     "name": "pulsar_dao",
     "version": "0.1.0",
@@ -26,32 +26,10 @@
         },
         {
           "name": "proposal_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  112,
-                  111,
-                  115,
-                  97,
-                  108
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "global_account.proposals_counter",
-                "account": "GlobalAccount"
-              }
-            ]
-          }
+          "writable": true
         },
         {
-          "name": "user",
+          "name": "author",
           "writable": true,
           "signer": true
         },
@@ -66,7 +44,110 @@
           "type": "string"
         },
         {
-          "name": "duration",
+          "name": "deadline",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "deposit_tokens",
+      "discriminator": [
+        176,
+        83,
+        229,
+        18,
+        191,
+        143,
+        176,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "global_account"
+        },
+        {
+          "name": "stake_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "lock_days",
           "type": "i64"
         }
       ]
@@ -105,14 +186,71 @@
                   111,
                   117,
                   110,
-                  116
+                  116,
+                  95,
+                  118,
+                  51
                 ]
               }
             ]
           }
         },
         {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "token_mint"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_stake",
+      "discriminator": [
+        33,
+        175,
+        216,
+        4,
+        116,
+        130,
+        164,
+        177
+      ],
+      "accounts": [
+        {
+          "name": "stake_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
         },
         {
           "name": "user",
@@ -127,21 +265,47 @@
       "args": []
     },
     {
-      "name": "toggle_vote_updates",
+      "name": "toggle_circuit_breaker",
       "discriminator": [
+        17,
+        31,
+        13,
+        36,
+        93,
+        205,
         125,
-        70,
-        220,
-        6,
-        186,
-        80,
-        228,
-        75
+        163
       ],
       "accounts": [
         {
           "name": "global_account",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  95,
+                  118,
+                  51
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "user",
@@ -152,44 +316,39 @@
       "args": []
     },
     {
-      "name": "update_vote",
+      "name": "unstake_tokens",
       "discriminator": [
-        95,
+        58,
+        119,
+        215,
+        143,
+        203,
         223,
-        212,
-        112,
-        234,
-        242,
-        37,
-        229
+        32,
+        86
       ],
       "accounts": [
         {
-          "name": "global_account",
-          "writable": true
-        },
-        {
-          "name": "proposal_account",
-          "writable": true
-        },
-        {
-          "name": "voter_account",
+          "name": "stake_record",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
-                  111,
+                  115,
                   116,
+                  97,
+                  107,
                   101,
-                  114
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
                 ]
-              },
-              {
-                "kind": "account",
-                "path": "proposal_account"
               },
               {
                 "kind": "account",
@@ -199,20 +358,49 @@
           }
         },
         {
-          "name": "token_account"
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint"
         },
         {
           "name": "user",
           "writable": true,
           "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
-      "args": [
-        {
-          "name": "vote",
-          "type": "bool"
-        }
-      ]
+      "args": []
     },
     {
       "name": "vote",
@@ -229,14 +417,39 @@
       "accounts": [
         {
           "name": "global_account",
-          "writable": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  95,
+                  118,
+                  51
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "proposal_account",
           "writable": true
         },
         {
-          "name": "voter_account",
+          "name": "voter_record",
           "writable": true,
           "pda": {
             "seeds": [
@@ -262,7 +475,37 @@
           }
         },
         {
-          "name": "token_account"
+          "name": "stake_record",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account"
         },
         {
           "name": "user",
@@ -276,7 +519,7 @@
       ],
       "args": [
         {
-          "name": "vote",
+          "name": "vote_yes",
           "type": "bool"
         }
       ]
@@ -296,14 +539,39 @@
       "accounts": [
         {
           "name": "global_account",
-          "writable": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  95,
+                  118,
+                  51
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "proposal_account",
           "writable": true
         },
         {
-          "name": "voter_account",
+          "name": "voter_record",
           "writable": true,
           "pda": {
             "seeds": [
@@ -365,74 +633,102 @@
       ]
     },
     {
-      "name": "VoterAccount",
+      "name": "VoterRecord",
       "discriminator": [
-        24,
+        178,
+        96,
+        138,
+        116,
+        143,
         202,
-        161,
-        124,
-        196,
-        184,
-        105,
-        236
+        115,
+        33
+      ]
+    },
+    {
+      "name": "VoterStakeRecord",
+      "discriminator": [
+        143,
+        131,
+        201,
+        69,
+        42,
+        5,
+        175,
+        60
       ]
     }
   ],
   "events": [
     {
-      "name": "ProposalCreated",
+      "name": "VoteCast",
       "discriminator": [
-        186,
-        8,
-        160,
-        108,
-        81,
-        13,
-        51,
-        206
+        39,
+        53,
+        195,
+        104,
+        188,
+        17,
+        225,
+        213
       ]
     }
   ],
   "errors": [
     {
       "code": 6000,
-      "name": "AlreadyVoted",
-      "msg": "User already voted on this proposal."
+      "name": "ProposalNotActive",
+      "msg": "Proposal is not active."
     },
     {
       "code": 6001,
-      "name": "QuestionTooLong",
-      "msg": "The question exceeds the maximum length of 200 characters."
+      "name": "ProposalExpired",
+      "msg": "Proposal has expired."
     },
     {
       "code": 6002,
-      "name": "ProposalExpired",
-      "msg": "The proposal has expired."
+      "name": "AlreadyVoted",
+      "msg": "You have already voted."
     },
     {
       "code": 6003,
-      "name": "VoteUpdatesDisabled",
-      "msg": "Vote updates are disabled."
+      "name": "CircuitBreakerTripped",
+      "msg": "System is OFFLINE (Circuit Breaker Tripped)."
     },
     {
       "code": 6004,
-      "name": "Unauthorized",
-      "msg": "Unauthorized."
+      "name": "InvalidVoteOption",
+      "msg": "Invalid vote option."
     },
     {
       "code": 6005,
-      "name": "InvalidTokenMint",
-      "msg": "Invalid Token Mint."
+      "name": "Unauthorized",
+      "msg": "Unauthorized access."
     },
     {
       "code": 6006,
-      "name": "InvalidTokenOwner",
-      "msg": "Invalid Token Owner."
+      "name": "TokensLocked",
+      "msg": "Tokens are still locked."
     },
     {
       "code": 6007,
+      "name": "LockDurationDowngrade",
+      "msg": "Lock duration cannot be less than previous stake."
+    },
+    {
+      "code": 6008,
+      "name": "NoTokensToUnstake",
+      "msg": "No tokens to unstake."
+    },
+    {
+      "code": 6009,
       "name": "NoVotingPower",
-      "msg": "No Voting Power (Balance is 0)."
+      "msg": "No voting power available (Stake tokens first)."
+    },
+    {
+      "code": 6010,
+      "name": "InvalidTokenAccount",
+      "msg": "Invalid token account."
     }
   ],
   "types": [
@@ -442,20 +738,20 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "proposals_counter",
-            "type": "u64"
-          },
-          {
             "name": "admin",
             "type": "pubkey"
           },
           {
-            "name": "vote_updates_enabled",
-            "type": "bool"
-          },
-          {
             "name": "token_mint",
             "type": "pubkey"
+          },
+          {
+            "name": "proposal_count",
+            "type": "u64"
+          },
+          {
+            "name": "system_enabled",
+            "type": "bool"
           }
         ]
       }
@@ -470,12 +766,12 @@
             "type": "u64"
           },
           {
-            "name": "question",
-            "type": "string"
-          },
-          {
             "name": "author",
             "type": "pubkey"
+          },
+          {
+            "name": "question",
+            "type": "string"
           },
           {
             "name": "yes",
@@ -488,24 +784,48 @@
           {
             "name": "deadline",
             "type": "i64"
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
           }
         ]
       }
     },
     {
-      "name": "ProposalCreated",
+      "name": "VoteCast",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "proposal_pda",
+            "name": "voter",
             "type": "pubkey"
+          },
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "lock_duration",
+            "type": "i64"
+          },
+          {
+            "name": "voting_power",
+            "type": "u64"
+          },
+          {
+            "name": "multiplier",
+            "type": "u64"
           }
         ]
       }
     },
     {
-      "name": "VoterAccount",
+      "name": "VoterRecord",
       "type": {
         "kind": "struct",
         "fields": [
@@ -527,6 +847,38 @@
           },
           {
             "name": "voting_power",
+            "type": "u64"
+          },
+          {
+            "name": "staked_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VoterStakeRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "staked_amount",
+            "type": "u64"
+          },
+          {
+            "name": "lock_end_time",
+            "type": "i64"
+          },
+          {
+            "name": "original_lock_days",
+            "type": "i64"
+          },
+          {
+            "name": "multiplier",
             "type": "u64"
           }
         ]

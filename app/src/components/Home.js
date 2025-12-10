@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Link } from 'react-router-dom';
-import { PublicKey } from '@solana/web3.js';
-import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
+import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { getAssociatedTokenAddress, getAccount, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import {
   CircularProgress,
   Typography,
@@ -10,126 +10,155 @@ import {
 import {
   program,
   programId,
-  proposalSeed,
-  globalAccountPDAAddress,
-  connection,
+  globalAccountPDAAddress, 
+  globalStateSeed,
+  proposalSeed 
 } from '../config';
 import Star from './Star';
+import { ArrowRight } from 'lucide-react';
 
 const Home = () => {
-  const [proposals, setProposals] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [proposalsCounter, setProposalsCounter] = useState(0);
-  const [admin, setAdmin] = useState(null);
-  const [voteUpdatesEnabled, setVoteUpdatesEnabled] = useState(false);
-  const [togglingVoteUpdates, setTogglingVoteUpdates] = useState(false);
-  const [votingPower, setVotingPower] = useState(0);
-  const [tokenMint, setTokenMint] = useState(null);
+  const { connection } = useConnection();
   const { connected, publicKey, sendTransaction } = useWallet();
 
-  const fetchGlobalAccount = async () => {
-    try {
-      const votingProgram = program({ publicKey: null });
-      const globalAccountPDA = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
-      
-      const fetchedCounter = Number(globalAccountPDA.proposalsCounter.toString());
-      if (fetchedCounter !== proposalsCounter) {
-        setProposalsCounter(fetchedCounter);
-      }
+  const [proposals, setProposals] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  const [proposalsCounter, setProposalsCounter] = useState(0);
+  const [admin, setAdmin] = useState(null);
+  
+  const [votingPower, setVotingPower] = useState(0);
+  const [tokenMint, setTokenMint] = useState(null);
+  const [stats, setStats] = useState({ liquid: 0, staked: 0, multiplier: 1 });
+  const [globalError, setGlobalError] = useState(null);
 
-      setAdmin(globalAccountPDA.admin.toString());
-      setVoteUpdatesEnabled(globalAccountPDA.voteUpdatesEnabled);
-      if (globalAccountPDA.tokenMint) {
-        setTokenMint(globalAccountPDA.tokenMint.toString());
-      }
 
-    } catch (error) {
-      console.error('Error fetching global account:', error);
-    }
-  };
+  const STAKE_RECORD_SEED = "stake_record";
 
+  // --- FETCH LOGIC ---
   useEffect(() => {
-    const fetchVotingPower = async () => {
-      if (!publicKey || !tokenMint) {
-        setVotingPower(0);
-        return;
-      }
+    const fetchAllData = async () => {
+       try {
+           // 1. Fetch Global Account (Mint & Config)
+           // Use wallet if connected, otherwise read-only logic handled by program() wrapper
+           const votingProgram = program({ publicKey: publicKey || null });
+           
+           // Re-derive global address to be 100% sure we match the imported programId
+           const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
+           
+           let mintAddr = null;
+           try {
+               const globalAccount = await votingProgram.account.globalAccount.fetch(globalAccountPDA);
+               mintAddr = globalAccount.tokenMint ? globalAccount.tokenMint.toString() : null;
+               setTokenMint(mintAddr);
+               
+               // Global Stats
+               // Ensure properties exist before accessing (IDL sync safety)
+               const counterBN = globalAccount.proposalCount;
+               const fetchedCounter = counterBN ? Number(counterBN.toString()) : 0;
+               if (fetchedCounter !== proposalsCounter) setProposalsCounter(fetchedCounter);
+               
+               setAdmin(globalAccount.admin ? globalAccount.admin.toString() : null);
+               setGlobalError(null);
 
-      try {
-        const mintPubkey = new PublicKey(tokenMint);
-        const ata = await getAssociatedTokenAddress(mintPubkey, publicKey);
-        const accountInfo = await getAccount(connection, ata);
-        const balance = Number(accountInfo.amount);
-        setVotingPower(Math.floor(Math.sqrt(balance)));
-      } catch (e) {
-        console.log("Error fetching token balance or no account found", e);
-        setVotingPower(0);
-      }
+           } catch(e) {
+               console.error("Home: Error fetching global", e);
+               // If global fetch fails, we can't do much. 
+               // Might not be initialized yet.
+               setGlobalError("DAO not initialized or Network Error");
+               setTokenMint(null);
+               return; 
+           }
+
+           // 2. Fetch User Voting Power (if connected && mint exists)
+           if (publicKey && mintAddr) {
+               let liquidAmount = 0;
+               let stakedAmount = 0;
+               let multiplier = 1;
+
+               // A. Liquid Tokens
+               try {
+                   const ata = await getAssociatedTokenAddress(new PublicKey(mintAddr), publicKey);
+                   const accountInfo = await getAccount(connection, ata);
+                   liquidAmount = Number(accountInfo.amount);
+               } catch(e) { /* No tokens or account not found -> 0 */ }
+
+               // B. Staked Tokens
+               try {
+                   const [stakeRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from(STAKE_RECORD_SEED), publicKey.toBuffer()],
+                        programId
+                    );
+                    const record = await votingProgram.account.voterStakeRecord.fetch(stakeRecordPDA);
+                    stakedAmount = record.stakedAmount.toNumber();
+                    multiplier = record.multiplier.toNumber();
+               } catch(e) { /* No stake record -> 0 */ }
+               
+               const totalVP = Math.round(Math.sqrt(liquidAmount) + Math.sqrt(stakedAmount) * multiplier);
+               setVotingPower(totalVP);
+               setStats({ liquid: liquidAmount, staked: stakedAmount, multiplier });
+           } else {
+               setVotingPower(0);
+               setStats({ liquid: 0, staked: 0, multiplier: 1 });
+           }
+
+           // 3. Fetch Proposals
+           if (proposalsCounter > 0) {
+              await fetchProposalsList(proposalsCounter);
+           } else if (proposalsCounter === 0) {
+              setProposals([]);
+           }
+
+       } catch(e) {
+           console.error("Home: Critical error in fetch loop", e);
+       }
     };
 
-    fetchVotingPower();
-  }, [publicKey, tokenMint]);
+    fetchAllData();
+    
+    // Auto-refresh every 10s
+    const interval = setInterval(fetchAllData, 10000);
+    return () => clearInterval(interval);
+  }, [publicKey, proposalsCounter, connection]); 
 
-  const toggleVoteUpdates = async () => {
-    if (!publicKey) return;
 
-    setTogglingVoteUpdates(true);
-    try {
-        const votingProgram = program({ publicKey });
-        const transaction = await votingProgram.methods
-            .toggleVoteUpdates()
-            .accounts({
-                globalAccount: globalAccountPDAAddress,
-                user: publicKey,
-            })
-            .transaction();
-        
-        const signature = await sendTransaction(transaction, connection);
-        await connection.confirmTransaction(signature, 'finalized');
-        
-        await fetchGlobalAccount();
-    } catch (error) {
-        console.error("Error toggling vote updates:", error);
-    } finally {
-        setTogglingVoteUpdates(false);
-    }
-  };
-
-  const fetchProposals = async () => {
-    if (proposalsCounter === 0) return;
-
+  // --- HELPER: Fetch Proposals List ---
+  const fetchProposalsList = async (count) => {
     try {
       const votingProgram = program({ publicKey: null });
       const foundProposals = [];
 
-      for (let counter = 1; counter <= proposalsCounter; counter++) {
+      // Iterate backwards to show newest first? Or loop 1..count. 
+      // Loop 1 to count.
+      for (let i = 1; i <= count; i++) {
         const [proposalPDAAddress] = await PublicKey.findProgramAddress(
-          [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(counter))],
+          [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(i))],
           programId
         );
 
         try {
           const proposalAccount = await votingProgram.account.proposalAccount.fetch(proposalPDAAddress);
           if (proposalAccount) {
-            const proposalData = {
-              number: counter,
+            foundProposals.push({
+              number: i,
               question: proposalAccount.question.toString(),
               totalVotes: Number(proposalAccount.yes.toString()) + Number(proposalAccount.no.toString()),
               deadline: Number(proposalAccount.deadline.toString()),
+              deadlineRaw: proposalAccount.deadline.toString(), // Debug
               pda: proposalPDAAddress.toBase58(),
-            };
-            foundProposals.push(proposalData);
+            });
           }
-        } catch (proposalFetchError) {
-          console.warn(`Failed to fetch proposal at counter ${counter}`, proposalFetchError);
-        }
+        } catch (e) { /* skip */ }
       }
+
+      // Sort by number descending (newest first)
+      foundProposals.sort((a, b) => b.number - a.number);
 
       if (JSON.stringify(foundProposals) !== JSON.stringify(proposals)) {
         setProposals(foundProposals);
       }
     } catch (error) {
-      console.error('Error fetching proposals:', error);
+      console.error('Error fetching proposals list:', error);
     }
   };
 
@@ -139,95 +168,89 @@ const Home = () => {
     return buffer;
   }
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      await fetchGlobalAccount();
-      await fetchProposals();
-      setLoading(false);
-    };
 
-    fetchData();
+  // --- ACTIONS ---
 
-    const interval = setInterval(async () => {
-      await fetchGlobalAccount();
-      await fetchProposals();
-    }, 30000);
 
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proposalsCounter]);
+  // The toggleVoteUpdates function and its related state (togglingVoteUpdates) have been removed as per the instruction.
 
+
+  // --- RENDER ---
   return (
-    <div className="space-y-8">
-      {/* Top Row: Voting Power & Chart */}
+    <div className="space-y-8 p-8 max-w-7xl mx-auto"> 
+      {/* 
+          Removed ml-64 as DashboardLayout already handles content offset.
+      */}
+
+      {/* Top Row: Voting Power & Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
+        {/* Voting Power Star - LEFT */}
         <div className="glass-card bg-card-nebula rounded-2xl p-8 relative overflow-hidden flex flex-col items-center justify-center min-h-[400px] border border-white/5">
             <Star className="w-96 h-96">
                 <div className="flex flex-col items-center justify-center pt-6">
                     <p className="text-gray-300 font-sans text-2xl mb-2 mt-4 tracking-wide font-medium uppercase">Voting Power</p>
-                    <h3 className="text-3xl font-sans font-bold text-white mb-2 tracking-tight drop-shadow-lg">
+                    <h3 className="text-4xl font-sans font-bold text-white mb-2 tracking-tight drop-shadow-lg">
                         {votingPower.toLocaleString()}
                     </h3>
                     <p className="text-pulsar-primary font-sans font-bold tracking-widest text-2xl">VOTES</p>
+                    
+                    {/* Optional: Show mint status if error */}
+                    {globalError && <p className="text-red-500 text-xs mt-2">{globalError}</p>}
                 </div>
             </Star>
         </div>
 
-        {/* Chart Card */}
-        <div className="glass-card bg-card-nebula rounded-2xl p-8 relative overflow-hidden min-h-[400px] flex flex-col border border-white/5">
-            <div className="flex justify-between items-start mb-8">
-                <div>
-                    <h3 className="text-lg font-display text-white tracking-wide">Volume per Custom</h3>
-                    <p className="text-pulsar-muted text-xs">Last 7 days</p>
-                </div>
-                <div className="flex gap-2">
-                    <span className="px-3 py-1 rounded bg-white/5 text-xs text-white border border-white/10">Voting</span>
-                </div>
-            </div>
-
-            {/* Custom SVG Chart */}
-            <div className="flex-1 flex items-end justify-between gap-2 px-4 pb-4 relative">
-                {/* Grid Lines */}
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10">
-                    <div className="border-t border-white w-full"></div>
-                    <div className="border-t border-white w-full"></div>
-                    <div className="border-t border-white w-full"></div>
-                    <div className="border-t border-white w-full"></div>
+        {/* Breakdown Stats - RIGHT (Replcaing Chart) */}
+        <div className="glass-card bg-card-nebula rounded-2xl p-8 relative overflow-hidden min-h-[400px] flex flex-col justify-center border border-white/5">
+            <h3 className="text-xl font-display text-white mb-8 border-b border-white/10 pb-4">Power Breakdown</h3>
+            
+            <div className="space-y-8">
+                {/* Liquid Stats */}
+                <div className="flex items-center justify-between group">
+                    <div>
+                        <p className="text-pulsar-muted text-sm uppercase tracking-wider mb-1">Liquid Tokens</p>
+                        <p className="text-2xl text-white font-mono">{stats.liquid.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-pulsar-secondary text-sm font-bold">Base Power</p>
+                        <p className="text-white text-lg font-mono">
+                           <span className="text-gray-500 text-sm">√{stats.liquid} ≈</span> {Math.round(Math.sqrt(stats.liquid))}
+                        </p>
+                    </div>
                 </div>
 
-                {/* Line Path (Simulated) */}
-                <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none">
-                    <defs>
-                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#00f3ff" stopOpacity="0.5" />
-                            <stop offset="100%" stopColor="#00f3ff" stopOpacity="0" />
-                        </linearGradient>
-                    </defs>
-                    <path 
-                        d="M0,300 C50,250 100,100 150,150 S250,200 300,100 S400,50 500,80" 
-                        fill="url(#chartGradient)" 
-                        stroke="#00f3ff" 
-                        strokeWidth="3"
-                        className="drop-shadow-[0_0_10px_rgba(0,243,255,0.5)]"
-                    />
-                    <path 
-                        d="M0,320 C50,280 100,150 150,200 S250,250 300,150 S400,100 500,120" 
-                        fill="none" 
-                        stroke="#bc13fe" 
-                        strokeWidth="3"
-                        className="opacity-50"
-                    />
-                </svg>
+                {/* Staked Stats */}
+                <div className="flex items-center justify-between group">
+                    <div>
+                        <p className="text-pulsar-muted text-sm uppercase tracking-wider mb-1">Staked Tokens</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-2xl text-white font-mono">{stats.staked.toLocaleString()}</p>
+                            {stats.staked > 0 ? (
+                                <span className="bg-pulsar-primary/20 text-pulsar-primary text-xs px-2 py-1 rounded border border-pulsar-primary/30">
+                                    {stats.multiplier}x Boost
+                                </span>
+                            ) : (
+                                <span className="bg-white/5 text-gray-500 text-xs px-2 py-1 rounded border border-white/10">
+                                    No Boost
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-emerald-400 text-sm font-bold">Staked Power</p>
+                        <p className="text-white text-lg font-mono">
+                           <span className="text-gray-500 text-sm">√{stats.staked} × {stats.staked > 0 ? stats.multiplier : 1} ≈</span> {Math.round(Math.sqrt(stats.staked) * (stats.staked > 0 ? stats.multiplier : 1))}
+                        </p>
+                    </div>
+                </div>
 
-                {/* X Axis Labels */}
-                <div className="absolute bottom-[-25px] left-0 w-full flex justify-between text-xs text-pulsar-muted font-mono">
-                    <span>Jan 1</span>
-                    <span>Jan 2</span>
-                    <span>Jan 3</span>
-                    <span>Jan 4</span>
-                    <span>Jan 5</span>
+                {/* Total Summary */}
+                <div className="mt-4 pt-6 border-t border-white/10">
+                    <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5">
+                        <span className="text-gray-400 font-medium">Total Hybrid Power</span>
+                        <span className="text-3xl font-bold text-white text-glow">{votingPower}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -240,11 +263,14 @@ const Home = () => {
                 <span className="whitespace-nowrap">Active Proposals</span>
                 <span className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent"></span>
             </h3>
-            <Link to="/create-proposal">
-                <button className="px-4 py-2 bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white rounded-lg font-bold text-sm hover:shadow-[0_0_20px_rgba(153,69,255,0.5)] transition-all duration-300">
-                    + Create Proposal
-                </button>
-            </Link>
+            {/* Create Button only for Admin */}
+            {admin === publicKey?.toString() && (
+                 <Link to="/create-proposal">
+                    <button className="px-4 py-2 bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white rounded-lg font-bold text-sm hover:shadow-[0_0_20px_rgba(153,69,255,0.5)] transition-all duration-300">
+                        + Create Proposal
+                    </button>
+                </Link>
+            )}
         </div>
 
         {loading ? (
@@ -259,62 +285,48 @@ const Home = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {proposals.map((proposal, index) => (
-              <div key={index} className="glass-card bg-card-nebula rounded-xl p-6 border border-white/5 hover:border-pulsar-primary/50 transition-all duration-300 group relative">
-                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-pulsar-primary to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                
-                <div className="mb-4">
-                    <span className="text-xs font-mono text-pulsar-muted">Proposal #{proposal.number.toString().padStart(3, '0')}</span>
-                </div>
-
-                <h4 className="text-lg font-display font-bold text-white mb-3 line-clamp-2 h-14">
-                    {proposal.question}
-                </h4>
-
-                <p className="text-sm text-pulsar-muted mb-6 line-clamp-2">
-                    Vote on this proposal to determine the future of the protocol parameters.
-                </p>
-
-                <div className="flex items-center justify-between mt-auto">
-                    <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-[10px] flex items-center justify-center font-bold">
-                            P
-                        </div>
-                        <span className="text-xs text-pulsar-muted">Pulsar Core</span>
-                    </div>
+            {proposals.map((proposal, index) => {
+                const isActive = Date.now()/1000 < proposal.deadline;
+                return (
+                  <div key={index} className="glass-card bg-card-nebula rounded-xl p-6 border border-white/5 hover:border-pulsar-primary/50 transition-all duration-300 group relative flex flex-col h-full">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-pulsar-primary to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     
-                    <Link to={`/proposal/${proposal.pda}`} style={{ textDecoration: 'none' }}>
-                        <button className="px-4 py-2 bg-pulsar-primary/10 text-pulsar-primary border border-pulsar-primary/50 rounded hover:bg-pulsar-primary hover:text-black transition-all duration-300 text-xs font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(0,243,255,0.2)] hover:shadow-[0_0_15px_rgba(0,243,255,0.5)]">
-                            Vote Now
-                        </button>
-                    </Link>
-                </div>
-              </div>
-            ))}
+                    <div className="mb-4 flex justify-between items-center">
+                        <span className="text-xs font-mono text-pulsar-muted">#{proposal.number}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isActive ? 'text-green-400 bg-green-500/10 border-green-500/30' : 'text-gray-400 bg-gray-500/10 border-gray-500/30'}`}>
+                            {isActive ? 'ACTIVE' : 'Ended'}
+                        </span>
+                    </div>
+
+                    <h4 className="text-lg font-display font-bold text-white mb-2 line-clamp-3">
+                        {proposal.question}
+                    </h4>
+                    
+                    <div className="mb-6 flex-1">
+                         <div className="text-xs text-pulsar-muted flex justify-between mb-1">
+                            <span>Deadline</span>
+                            <span>{new Date(proposal.deadline * 1000).toLocaleDateString()}</span>
+                         </div>
+                         <div className="text-xs text-pulsar-muted flex justify-between">
+                            <span>Total Votes</span>
+                            <span className="text-white font-mono">{proposal.totalVotes.toLocaleString()}</span>
+                         </div>
+                    </div>
+
+                    {/* Details Link */}
+                    <div className="mt-auto pt-6 border-t border-white/5">
+                         <Link to={`/proposal/${proposal.number}`} className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 rounded-lg text-white font-bold transition-all group">
+                             View Details <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
+                         </Link>
+                    </div>
+                  </div>
+                );
+            })}
           </div>
         )}
       </div>
 
-      {/* Admin Controls */}
-      {connected && publicKey && admin && publicKey.toString() === admin && (
-        <div className="mt-12 p-6 glass-panel rounded-xl border border-white/5 opacity-50 hover:opacity-100 transition-opacity">
-            <div className="flex justify-between items-center">
-                <Typography variant="subtitle2" className="font-mono text-pulsar-muted">ADMIN_PROTOCOL_V1</Typography>
-                <div className="flex items-center gap-4">
-                    <span className={`text-xs font-bold ${voteUpdatesEnabled ? "text-green-400" : "text-red-400"}`}>
-                        {voteUpdatesEnabled ? "SYSTEM ONLINE" : "SYSTEM OFFLINE"}
-                    </span>
-                    <button 
-                        onClick={toggleVoteUpdates}
-                        disabled={togglingVoteUpdates}
-                        className="px-3 py-1 border border-white/20 text-xs text-white hover:bg-white/10 rounded"
-                    >
-                        TOGGLE
-                    </button>
-                </div>
-            </div>
-        </div>
-      )}
+      {/* Admin Controls Moved to DAO Admin */}
     </div>
   );
 };

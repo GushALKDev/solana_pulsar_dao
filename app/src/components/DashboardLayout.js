@@ -8,19 +8,6 @@ import { useLocation } from 'react-router-dom';
 const DashboardLayout = ({ children }) => {
   const location = useLocation();
 
-  const getPageTitle = (pathname) => {
-    switch (pathname) {
-      case '/': return 'Dashboard';
-      case '/voting': return 'Voting';
-      case '/community': return 'Community';
-      case '/proposals': return 'Proposals';
-      case '/privacy': return 'Privacy';
-      case '/settings': return 'Settings';
-      default: 
-        if (pathname.startsWith('/proposal/')) return 'Proposal Details';
-        return 'Dashboard';
-    }
-  };
 
   return (
     <div className="min-h-screen bg-nebula text-white font-sans flex">
@@ -29,10 +16,7 @@ const DashboardLayout = ({ children }) => {
       {/* Main Content Area */}
       <div className="flex-1 ml-64">
         {/* Header */}
-        <header className="h-20 px-8 flex items-center justify-between bg-transparent sticky top-0 z-40">
-            <h2 className="text-xl font-display font-medium tracking-wide text-white">
-              {getPageTitle(location.pathname)}
-            </h2>
+        <header className="h-20 px-8 flex items-center justify-end bg-transparent sticky top-0 z-40">
             
             <div className="flex items-center gap-6">
                 <button className="relative p-2 text-pulsar-muted hover:text-white transition-colors">

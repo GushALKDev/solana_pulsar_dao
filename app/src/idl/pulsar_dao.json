@@ -729,6 +729,11 @@
       "code": 6010,
       "name": "InvalidTokenAccount",
       "msg": "Invalid token account."
+    },
+    {
+      "code": 6011,
+      "name": "InvalidLockDuration",
+      "msg": "Invalid lock duration."
     }
   ],
   "types": [

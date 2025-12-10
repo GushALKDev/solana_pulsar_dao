@@ -28,19 +28,27 @@ Your voting influence is dynamically calculated based on two factors:
 2.  **Staked Balance:** Tokens locked in the DAO Vault provide boosted power.
 
 **Formula:**
-$$ \text{Voting Power} = \sqrt{\text{Liquid Tokens}} + (\sqrt{\text{Staked Tokens}} \times \text{Time Multiplier}) $$
+
+`Voting Power = √Liquid Tokens + (√Staked Tokens × Time Multiplier)`
 
 > **Note:** Proposals have a strictly enforced **Deadline**. Once the deadline timestamp is passed (checked on-chain via `Clock::get()`), no further votes can be cast or withdrawn.
 
 ### 🔐 Global Staking
 - **Unified Stake Record:** A single staking account per user simplifies management.
 - **Time-Lock Multipliers:** Earn more governance power by locking tokens for longer periods.
-    - **30 Days:** 1x Multiplier
-    - **60 Days:** 2x Multiplier
-    - **90 Days:** 3x Multiplier
-    - **180 Days:** 4x Multiplier
-    - **365 Days:** 5x Max Multiplier
+    *Note: For testing/hackathon purposes, these are currently set to seconds.*
+    - **30 Seconds:** 2x Multiplier (Base)
+    - **90 Seconds:** 3x Multiplier
+    - **180 Seconds:** 4x Multiplier
+    - **360 Seconds:** 5x Max Multiplier
 - **Security:** Strict on-chain validation prevents unstaking before lock expiry.
+
+### 📊 Analytics Dashboard
+A real-time analytics hub provides deep insights into DAO activity:
+- **KPIs:** Track total votes cast, active proposals, and proposal completion rates.
+- **Engagement Charts:** Visual bar charts showing YES/NO vote distribution per proposal.
+- **Sentiment Analysis:** Global pie chart aggregating historical voting trends.
+- **Top Proposals:** Leaderboard of the most engaged proposals.
 
 ### ⏳ Time-Limited Proposals
 Every proposal is created with a specific, immutable deadline to ensure timely governance decisions.

@@ -347,7 +347,7 @@ const StakeManager = ({ tokenMintAddress }) => {
                                             : 'bg-black/20 border-white/5 text-gray-400 hover:border-white/20'
                                     }`}
                                 >
-                                    {days}d
+                                    {days}s
                                     <span className="block text-[10px] opacity-70 mt-1">
                                         {getMultiplier(days)}x Boost
                                     </span>
@@ -456,7 +456,7 @@ const StakeManager = ({ tokenMintAddress }) => {
                                     </div>
                                     <div className="text-xs text-gray-500">
                                          {stakeRecord && stakeRecord.lockEndTime.toNumber() * 1000 > Date.now() 
-                                         ? `${Math.ceil((stakeRecord.lockEndTime.toNumber() * 1000 - Date.now()) / (1000 * 60 * 60 * 24))} days left` 
+                                         ? `${Math.ceil((stakeRecord.lockEndTime.toNumber() * 1000 - Date.now()) / 1000)}s left` 
                                          : "Unlocked"}
                                     </div>
                                 </div>

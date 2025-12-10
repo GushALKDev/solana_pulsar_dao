@@ -203,13 +203,26 @@ pub mod pulsar_dao {
         
         let clock = Clock::get()?;
         let current_time = clock.unix_timestamp;
-        let lock_seconds = lock_days * 24 * 60 * 60;
+        
+        // HACKATHON MODE: lock_days is treated as SECONDS
+        let lock_seconds = lock_days;
+        
+        // let lock_seconds = lock_days * 24 * 60 * 60;
         
         stake_record.lock_end_time = current_time + lock_seconds;
         stake_record.original_lock_days = lock_days;
 
-        let raw_multiplier = if lock_days >= 30 { 1 + (lock_days / 30) as u64 } else { 1 };
-        let multiplier = std::cmp::min(raw_multiplier, 5); // Cap to 5x
+        stake_record.lock_end_time = current_time + lock_seconds;
+        stake_record.original_lock_days = lock_days;
+
+        // Exact match logic for multipliers
+        let multiplier = match lock_days {
+            30 => 2,
+            90 => 3,
+            180 => 4,
+            360 => 5,
+            _ => return Err(ErrorCode::InvalidLockDuration.into()),
+        };
         stake_record.multiplier = multiplier;
 
         Ok(())
@@ -489,6 +502,8 @@ pub enum ErrorCode {
     NoVotingPower,
     #[msg("Invalid token account.")]
     InvalidTokenAccount,
+    #[msg("Invalid lock duration.")]
+    InvalidLockDuration,
 }
 
 #[event]

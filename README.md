@@ -57,6 +57,11 @@ Every proposal is created with a specific, immutable deadline to ensure timely g
 - **Custom Duration:** Proposal creators define the voting window (e.g., 24 hours, 7 days).
 - **Automatic Expiry:** Smart contracts rigidly enforce the deadline using the on-chain `Clock`. Once time is up, no new votes or withdrawals are accepted.
 
+### 🔔 Smart Notifications
+- **Real-Time Updates:** A bell icon alerts users to new proposals instantly.
+- **Smart Tracking:** The system remembers which proposals a user has seen, showing a "New" indicator only for relevant items.
+- **Auto-Read:** Viewing a proposal or clicking the notification automatically marks it as read.
+
 ### ⚡ Advanced Vote Management
 - **Switch Vote:** specific support allows users to change their opinion (e.g., YES → NO) dynamically while the proposal is active.
 - **Withdraw Vote:** Users can retract their vote entirely to reclaim their governance weight or correct mistakes.
@@ -70,6 +75,12 @@ A real-time analytics hub provides deep insights into DAO activity:
 - **Engagement Charts:** Visual bar charts showing YES/NO vote distribution per proposal.
 - **Sentiment Analysis:** Global pie chart aggregating historical voting trends.
 - **Top Proposals:** Leaderboard of the most engaged proposals.
+
+### 👮 Admin & Security
+- **Restricted Access:** Only the DAO Admin (initializer) can create new proposals, enforced by both:
+    - **Smart Contract:** Strict `constraint` checks preventing unauthorized instruction calls.
+    - **Frontend:** Route protection that redirects unauthorized wallets.
+- **Circuit Breaker:** Admin can pause the entire system in emergencies.
 
 ---
 

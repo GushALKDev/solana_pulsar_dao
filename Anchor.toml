@@ -15,7 +15,7 @@ pulsar_dao = "3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
-import { CheckCircle, XCircle, ArrowLeft, Clock, Vote, AlertTriangle, Loader2 } from 'lucide-react';
-import { program, programId, proposalSeed, globalStateSeed } from '../config';
+import { CheckCircle, XCircle, ArrowLeft, Clock, Vote, AlertTriangle, Loader2, Users, Lock } from 'lucide-react';
+import { program, programId, proposalSeed, globalStateSeed, delegationRecordSeed, delegateProfileSeed } from '../config';
 
 const STAKE_RECORD_SEED = "stake_record";
 
@@ -24,9 +24,12 @@ const Proposal = () => {
     const [loading, setLoading] = useState(true);
     const [votingLoading, setVotingLoading] = useState(false);
     const [tokenMint, setTokenMint] = useState(null);
-    const [votingPower, setVotingPower] = useState(null);
+    const [votingPower, setVotingPower] = useState(0);
+    const [delegatedPower, setDelegatedPower] = useState(0); 
+    const [delegatorsList, setDelegatorsList] = useState([]); // Store delegators for proxy voting
+    const [delegatedTo, setDelegatedTo] = useState(null);
     const [systemEnabled, setSystemEnabled] = useState(true);
-    const [userVoterInfo, setUserVoterInfo] = useState(null); // { voted: bool, vote: bool }
+    const [userVoterInfo, setUserVoterInfo] = useState(null); // { voted: bool, vote: bool, votedByProxy: bool }
 
     // Calculate User Voting Power
     useEffect(() => {
@@ -45,8 +48,9 @@ const Proposal = () => {
                  // 2. Staked Power
                  let stakedAmount = 0;
                  let multiplier = 1;
+                 const votingProgram = program({ publicKey }); 
+                 
                  try {
-                     const votingProgram = program({ publicKey }); 
                      const [stakeRecordPDA] = PublicKey.findProgramAddressSync(
                         [Buffer.from(STAKE_RECORD_SEED), publicKey.toBuffer()],
                         programId
@@ -59,8 +63,60 @@ const Proposal = () => {
                  // Mimic Rust's integer arithmetic exactly: floor(sqrt(a)) + floor(sqrt(b)) * m
                  const liquidPower = Math.floor(Math.sqrt(liquidAmount));
                  const stakedPower = Math.floor(Math.sqrt(stakedAmount)) * multiplier;
+
                  setVotingPower(liquidPower + stakedPower);
-                 
+
+                 // Check Delegation
+                 try {
+                     const [delegationRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from(delegationRecordSeed), publicKey.toBuffer()],
+                        programId
+                     );
+                     const record = await votingProgram.account.delegationRecord.fetch(delegationRecordPDA);
+                     setDelegatedTo(record.delegateTarget.toString());
+                 } catch(e) { setDelegatedTo(null); }
+
+                  // Check if I am a Delegate & Calc Delegated Power
+                   try {
+                         const [myProfilePDA] = PublicKey.findProgramAddressSync(
+                            [Buffer.from(delegateProfileSeed), publicKey.toBuffer()],
+                            programId
+                         );
+                         const profile = await votingProgram.account.delegateProfile.fetch(myProfilePDA);
+                         if (profile && profile.isActive) {
+                             // Fetch Delegators
+                             const allRecords = await votingProgram.account.delegationRecord.all();
+                             const myDelegators = allRecords.filter(r => r.account.delegateTarget.toString() === publicKey.toString());
+                             setDelegatorsList(myDelegators);
+                             
+                             let totalDelegated = 0;
+                             await Promise.all(myDelegators.map(async (record) => {
+                                 const delegatorPubkey = record.account.delegator;
+                                 let dLiquid = 0;
+                                 try {
+                                     const dATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), delegatorPubkey);
+                                     const dBal = await connection.getTokenAccountBalance(dATA);
+                                     dLiquid = dBal.value.uiAmount || 0;
+                                 } catch(e) {}
+                                 let dStaked = 0;
+                                 let dMult = 1;
+                                 try {
+                                     const [dStakePDA] = PublicKey.findProgramAddressSync(
+                                         [Buffer.from("stake_record"), delegatorPubkey.toBuffer()],
+                                         programId
+                                     );
+                                     const dStake = await votingProgram.account.voterStakeRecord.fetch(dStakePDA);
+                                     dStaked = parseFloat(dStake.stakedAmount.toString());
+                                     dMult = parseFloat(dStake.multiplier.toString());
+                                 } catch(e) {}
+                                 totalDelegated += Math.floor(Math.sqrt(dLiquid)) + Math.floor(Math.sqrt(dStaked)) * dMult;
+                             }));
+                             setDelegatedPower(totalDelegated);
+                         }
+                    } catch (e) {
+                        setDelegatedPower(0);
+                    }
+                  
             } catch(e) { console.error("Error fetching VP", e); }
         };
         fetchVP();
@@ -85,7 +141,7 @@ const Proposal = () => {
                          setSystemEnabled(globalAccount.systemEnabled);
                     }
                 } catch(e) {
-                    console.log("DAO not initialized yet");
+
                 }
 
                 // Derive Proposal PDA
@@ -115,15 +171,29 @@ const Proposal = () => {
                     );
                     try {
                         const record = await votingProgram.account.voterRecord.fetch(voterRecordPDA);
-                        console.log("Voter Record Fetched:", record);
+
                         const vp = record.votingPower ? record.votingPower.toString() : (record.voting_power ? record.voting_power.toString() : "0");
                         setUserVoterInfo({ 
                             voted: record.voted, 
                             vote: record.vote,
+                            votedByProxy: record.votedByProxy ?? record.voted_by_proxy,
                             votingPower: vp
                         });
                     } catch (err) {
-                        setUserVoterInfo(null);
+                        // If self-record fails/empty, check if we are a proxy who voted for delegators
+                        // This block is for the DELEGATE, not the DELEGATOR.
+                        // So, if the current user is a delegate, and they voted for their delegators,
+                        // their own userVoterInfo should not reflect 'votedByProxy'.
+                        // 'votedByProxy' is for the delegator whose vote was cast by someone else.
+                        let foundProxyVoteForDelegator = false;
+                        if (delegatorsList.length > 0) {
+                             // This logic is primarily to show the delegate that *some* action happened.
+                             // It doesn't mean *their* vote was cast by proxy.
+                             // For now, we'll keep userVoterInfo null if no direct vote record for the delegate.
+                             // The UI will handle showing delegated power separately.
+                        }
+                        
+                        if (!foundProxyVoteForDelegator) setUserVoterInfo(null);
                     }
                 }
 
@@ -139,7 +209,7 @@ const Proposal = () => {
         // Poll every 5s for live updates
         const interval = setInterval(fetchProposal, 5000);
         return () => clearInterval(interval);
-    }, [id]);
+    }, [id, delegatorsList, votingPower]); // Add votingPower dependency to refresh proxy status check
 
     // Countdown Timer
     const [timeLeft, setTimeLeft] = useState('');
@@ -193,36 +263,106 @@ const Proposal = () => {
         try {
             const votingProgram = program({ publicKey, sendTransaction });
             const proposalPubkey = new PublicKey(proposal.pda);
-    
-            const [voterRecordPDA] = PublicKey.findProgramAddressSync(
-                [Buffer.from('voter'), proposalPubkey.toBuffer(), publicKey.toBuffer()],
-                programId
-            );
-            const [stakeRecordPDA] = PublicKey.findProgramAddressSync(
-                [Buffer.from(STAKE_RECORD_SEED), publicKey.toBuffer()],
-                programId
-            );
-            
             const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
-            const userATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), publicKey);
-    
-            let validStakeRecord = null;
-            try {
-                const info = await connection.getAccountInfo(stakeRecordPDA);
-                if (info) validStakeRecord = stakeRecordPDA;
-            } catch(e) {}
 
-            const transaction = await votingProgram.methods
-                .vote(voteYes)
-                .accounts({
-                    globalAccount: globalAccountPDA,
-                    proposalAccount: proposalPubkey,
-                    voterRecord: voterRecordPDA,
-                    stakeRecord: validStakeRecord,
-                    userTokenAccount: userATA,
-                    user: publicKey,
-                })
-                .transaction();
+            const transaction = new Transaction();
+            let hasInstructions = false;
+
+            // 1. Direct Vote (Only if user has power themselves)
+            // Fixes "AccountNotInitialized" error for Delegates with 0 tokens
+            if (votingPower > 0) {
+                const [voterRecordPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from('voter'), proposalPubkey.toBuffer(), publicKey.toBuffer()],
+                    programId
+                );
+                const [stakeRecordPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from(STAKE_RECORD_SEED), publicKey.toBuffer()],
+                    programId
+                );
+                const userATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), publicKey);
+
+                // Check stake record existence
+                let validStakeRecord = null;
+                try {
+                    const info = await connection.getAccountInfo(stakeRecordPDA);
+                    if (info) validStakeRecord = stakeRecordPDA;
+                } catch(e) {}
+
+                const [delegationRecordPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from(delegationRecordSeed), publicKey.toBuffer()],
+                    programId
+                );
+
+                const ix = await votingProgram.methods
+                    .vote(voteYes)
+                    .accounts({
+                        globalAccount: globalAccountPDA,
+                        proposalAccount: proposalPubkey,
+                        voterRecord: voterRecordPDA,
+                        stakeRecord: validStakeRecord,
+                        userTokenAccount: userATA,
+                        delegationRecord: delegationRecordPDA,
+                        user: publicKey,
+                    })
+                    .instruction();
+                
+                transaction.add(ix);
+                hasInstructions = true;
+            }
+
+            // 2. Proxy Votes (For each Delegator)
+            if (delegatorsList.length > 0) {
+                // Fetch Delegate Profile
+                const [myProfilePDA] = PublicKey.findProgramAddressSync(
+                     [Buffer.from(delegateProfileSeed), publicKey.toBuffer()],
+                     programId
+                );
+
+                for (const dRecord of delegatorsList) {
+                    const delegatorPubkey = dRecord.account.delegator;
+                    
+                    // Derivations
+                    const [dDelegationRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from(delegationRecordSeed), delegatorPubkey.toBuffer()],
+                        programId
+                    );
+                    const [dVoterRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from('voter'), proposalPubkey.toBuffer(), delegatorPubkey.toBuffer()],
+                        programId
+                    );
+                    const [dStakeRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from(STAKE_RECORD_SEED), delegatorPubkey.toBuffer()],
+                        programId
+                    );
+                    
+                    // Delegator Must Have an ATA for vote to count (Liquid Power)
+                    const dATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), delegatorPubkey);
+                    
+                    const proxyIx = await votingProgram.methods
+                        .voteAsProxy(voteYes)
+                        .accounts({
+                            globalAccount: globalAccountPDA,
+                            proposalAccount: proposalPubkey,
+                            delegateProfile: myProfilePDA,
+                            delegationRecord: dDelegationRecordPDA,
+                            voterRecord: dVoterRecordPDA,
+                            delegatorTokenAccount: dATA,
+                            delegatorStakeRecord: dStakeRecordPDA, // Account checks handle null inside program if we pass correct address but empty? No, checking exists helps
+                            delegatorUser: delegatorPubkey,
+                            proxyAuthority: publicKey,
+                        })
+                        .instruction();
+                    
+                    transaction.add(proxyIx);
+                    hasInstructions = true;
+                }
+            }
+            
+            if (!hasInstructions) {
+                alert("No voting power to cast (0 Personal + 0 Delegated).");
+                setVotingLoading(false);
+                return;
+            }
             
             const signature = await sendTransaction(transaction, connection);
             await connection.confirmTransaction(signature, 'finalized');
@@ -231,16 +371,15 @@ const Proposal = () => {
             setVoteSuccess(true);
             setTimeout(() => setVoteSuccess(false), 2000);
             
-            // Optimistic Update
-             // We can't know exact new power without refetching, but usually it matches current VP
-             // For now, trigger a refetch of everything by navigating or just waiting for poll
-            setUserVoterInfo({ voted: true, vote: voteYes, votingPower: votingPower });
-
+            // Refetch Proposal & User status
+            // Simple way: reload page or trigger existing poll
+            // For now, assume optimistic update is hard for batch, just let poll catch it
+            
         } catch (e) {
             console.error("Vote Error:", e);
             setVotingLoading(false);
              if (e.message.includes("Account does not exist") || e.message.includes("Constraint")) {
-                 alert("Vote Failed. Stake or check requirements.");
+                 alert("Vote Failed. Check requirements (ATA, Stake).");
              } else {
                  alert("Vote Failed: " + e.message);
              }
@@ -253,27 +392,89 @@ const Proposal = () => {
         try {
             const votingProgram = program({ publicKey, sendTransaction });
             const proposalPubkey = new PublicKey(proposal.pda);
+            const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
+
+            const transaction = new Transaction();
+            let hasInstructions = false;
+
+            // 1. Withdraw Self (if has voting power/record)
+             // We try blindly or check? Just try. If it fails, maybe simulation fails? 
+             // Better only if votingPower > 0
+            // 1. Withdraw Self (Only if Voter Record Exists)
             const [voterRecordPDA] = PublicKey.findProgramAddressSync(
                 [Buffer.from('voter'), proposalPubkey.toBuffer(), publicKey.toBuffer()],
                 programId
             );
-            const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
 
-            const tx = await votingProgram.methods
-                .withdrawVote()
-                .accounts({
-                    globalAccount: globalAccountPDA,
-                    proposalAccount: proposalPubkey,
-                    voterRecord: voterRecordPDA,
-                    user: publicKey,
-                })
-                .transaction();
+            let selfVoted = false;
+            try {
+                const record = await votingProgram.account.voterRecord.fetch(voterRecordPDA);
+                if (record.voted) selfVoted = true;
+            } catch (err) {
+                // Not found or not initialized
+            }
 
-            const signature = await sendTransaction(tx, connection);
+            if (selfVoted) {
+                 const ix = await votingProgram.methods
+                    .withdrawVote()
+                    .accounts({
+                        globalAccount: globalAccountPDA,
+                        proposalAccount: proposalPubkey,
+                        voterRecord: voterRecordPDA,
+                        user: publicKey,
+                    })
+                    .instruction();
+                transaction.add(ix);
+                hasInstructions = true;
+            }
+
+            // 2. Withdraw as Proxy
+            if (delegatorsList.length > 0) {
+                 const [myProfilePDA] = PublicKey.findProgramAddressSync(
+                     [Buffer.from(delegateProfileSeed), publicKey.toBuffer()],
+                     programId
+                );
+
+                 for (const dRecord of delegatorsList) {
+                    const delegatorPubkey = dRecord.account.delegator;
+                    
+                    const [dDelegationRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from(delegationRecordSeed), delegatorPubkey.toBuffer()],
+                        programId
+                    );
+                    const [dVoterRecordPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from('voter'), proposalPubkey.toBuffer(), delegatorPubkey.toBuffer()],
+                        programId
+                    );
+
+                    const proxyIx = await votingProgram.methods
+                        .withdrawAsProxy()
+                        .accounts({
+                            globalAccount: globalAccountPDA,
+                            proposalAccount: proposalPubkey,
+                            delegateProfile: myProfilePDA,
+                            delegationRecord: dDelegationRecordPDA,
+                            voterRecord: dVoterRecordPDA,
+                            delegatorUser: delegatorPubkey,
+                            proxyAuthority: publicKey,
+                        })
+                        .instruction();
+                    transaction.add(proxyIx);
+                    hasInstructions = true;
+                }
+            }
+
+            if (!hasInstructions) {
+                 alert("Nothing to withdraw.");
+                 setVotingLoading(false);
+                 return;
+            }
+
+            const signature = await sendTransaction(transaction, connection);
             await connection.confirmTransaction(signature, 'finalized');
 
             setVotingLoading(false);
-            setVoteSuccess(true); // Maybe different icon?
+            setVoteSuccess(true); 
             setTimeout(() => setVoteSuccess(false), 2000);
             
             setUserVoterInfo(prev => ({ ...prev, voted: false }));
@@ -407,6 +608,20 @@ const Proposal = () => {
                                     : (votingPower !== null ? votingPower.toLocaleString() : '...')
                                 } ⚡
                              </span>
+                             
+                             {/* Delegated Power Display */}
+                             {delegatedPower > 0 && (
+                                <span className="text-xs text-[#14F195] bg-[#14F195]/10 px-2 py-1 rounded ml-2 flex items-center gap-1">
+                                    <Users size={12} />
+                                    +{delegatedPower.toLocaleString()} Delegated
+                                </span>
+                             )}
+
+                             {delegatedTo && !userVoterInfo?.voted && (
+                                <span className="text-[10px] text-gray-400 bg-white/10 px-2 py-1 rounded ml-2">
+                                    Delegated to {delegatedTo.slice(0,4)}...
+                                </span>
+                             )}
                         </div>
                    </div>
                )}
@@ -421,51 +636,77 @@ const Proposal = () => {
                                 <span className="text-red-400 font-bold text-sm">HEADS UP: Voting System is currently PAUSED for maintenance or security.</span>
                             </div>
                         )}
-                        
-                       <button 
-                           onClick={() => handleVote(true)}
-                           disabled={votingLoading || !publicKey || !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === true)}
-                           className={`group relative overflow-hidden rounded-xl p-6 transition-all duration-300 border ${
-                               !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === true)
-                               ? 'bg-gray-800/50 border-gray-700 cursor-not-allowed opacity-50' 
-                               : 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]'
-                           }`}
-                       >
-                           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 via-emerald-500/0 to-emerald-500/5 group-hover:to-emerald-500/10 transition-all duration-500"></div>
-                           
-                           <div className="relative z-10 flex flex-col items-center gap-3">
-                               <div className={`p-4 rounded-full transition-colors ${!systemEnabled ? 'bg-gray-700 text-gray-400' : (userVoterInfo?.voted && userVoterInfo?.vote === true ? 'bg-emerald-500 text-black' : 'bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-black')}`}>
-                                   <CheckCircle size={32} />
-                               </div>
-                               <span className={`font-display font-bold text-lg tracking-wider ${!systemEnabled ? 'text-gray-500' : 'text-white'}`}>
-                                   {userVoterInfo?.voted && userVoterInfo?.vote === true ? 'VOTED YES' : (userVoterInfo?.voted ? 'SWITCH TO YES' : 'VOTE YES')}
-                               </span>
-                           </div>
-                       </button>
 
-                       <button 
-                           onClick={() => handleVote(false)}
-                           disabled={votingLoading || !publicKey || !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === false)}
-                           className={`group relative overflow-hidden rounded-xl p-6 transition-all duration-300 border ${
-                               !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === false)
-                               ? 'bg-gray-800/50 border-gray-700 cursor-not-allowed opacity-50' 
-                               : 'bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 hover:scale-[1.02] active:scale-[0.98]'
-                           }`}
-                       >
-                           <div className="absolute inset-0 bg-gradient-to-br from-red-500/0 via-red-500/0 to-red-500/5 group-hover:to-red-500/10 transition-all duration-500"></div>
-                           
-                           <div className="relative z-10 flex flex-col items-center gap-3">
-                               <div className={`p-4 rounded-full transition-colors ${!systemEnabled ? 'bg-gray-700 text-gray-400' : (userVoterInfo?.voted && userVoterInfo?.vote === false ? 'bg-red-500 text-black' : 'bg-red-500/20 text-red-500 group-hover:bg-red-500 group-hover:text-black')}`}>
-                                   <XCircle size={32} />
-                               </div>
-                               <span className={`font-display font-bold text-lg tracking-wider ${!systemEnabled ? 'text-gray-500' : 'text-white'}`}>
-                                   {userVoterInfo?.voted && userVoterInfo?.vote === false ? 'VOTED NO' : (userVoterInfo?.voted ? 'SWITCH TO NO' : 'VOTE NO')}
-                               </span>
-                           </div>
-                       </button>
+                        {/* Delegation Warning */}
+                        {delegatedTo && (
+                             <div className="col-span-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-center gap-3 mb-2">
+                                <Users className="text-yellow-500 w-6 h-6" />
+                                <div>
+                                    <span className="text-yellow-400 font-bold text-sm block">You have delegated your power to {delegatedTo.substring(0, 6)}...{delegatedTo.substring(delegatedTo.length - 4)}.</span>
+                                    <span className="text-yellow-400/80 text-xs">Revoke your delegation to vote manually.</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Proxy Vote Locked Warning */}
+                        {!delegatedTo && userVoterInfo?.votedByProxy && (
+                             <div className="col-span-2 bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-center gap-3 mb-2">
+                                <Lock className="text-blue-500 w-6 h-6" />
+                                <div>
+                                    <span className="text-blue-400 font-bold text-sm block">Vote Cast by Proxy</span>
+                                    <span className="text-blue-400/80 text-xs">This vote was cast by your delegate and is locked for this proposal.</span>
+                                </div>
+                            </div>
+                        )}
+                        
+                       {!delegatedTo && !userVoterInfo?.votedByProxy && (
+                           <>
+                               <button 
+                                   onClick={() => handleVote(true)}
+                                   disabled={votingLoading || !publicKey || !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === true) || userVoterInfo?.votedByProxy}
+                                   className={`group relative overflow-hidden rounded-xl p-6 transition-all duration-300 border ${
+                                       !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === true) || userVoterInfo?.votedByProxy
+                                       ? 'bg-gray-800/50 border-gray-700 cursor-not-allowed opacity-50' 
+                                       : 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]'
+                                   }`}
+                               >
+                                   <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 via-emerald-500/0 to-emerald-500/5 group-hover:to-emerald-500/10 transition-all duration-500"></div>
+                                   
+                                   <div className="relative z-10 flex flex-col items-center gap-3">
+                                       <div className={`p-4 rounded-full transition-colors ${!systemEnabled || userVoterInfo?.votedByProxy ? 'bg-gray-700 text-gray-400' : (userVoterInfo?.voted && userVoterInfo?.vote === true ? 'bg-emerald-500 text-black' : 'bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-black')}`}>
+                                           <CheckCircle size={32} />
+                                       </div>
+                                       <span className={`font-display font-bold text-lg tracking-wider ${!systemEnabled || userVoterInfo?.votedByProxy ? 'text-gray-500' : 'text-white'}`}>
+                                           {userVoterInfo?.voted && userVoterInfo?.vote === true ? 'VOTED YES' : (userVoterInfo?.voted ? 'SWITCH TO YES' : 'VOTE YES')}
+                                       </span>
+                                   </div>
+                               </button>
+
+                               <button 
+                                   onClick={() => handleVote(false)}
+                                   disabled={votingLoading || !publicKey || !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === false) || userVoterInfo?.votedByProxy}
+                                   className={`group relative overflow-hidden rounded-xl p-6 transition-all duration-300 border ${
+                                       !systemEnabled || (userVoterInfo?.voted && userVoterInfo?.vote === false) || userVoterInfo?.votedByProxy
+                                       ? 'bg-gray-800/50 border-gray-700 cursor-not-allowed opacity-50' 
+                                       : 'bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 hover:scale-[1.02] active:scale-[0.98]'
+                                   }`}
+                               >
+                                   <div className="absolute inset-0 bg-gradient-to-br from-red-500/0 via-red-500/0 to-red-500/5 group-hover:to-red-500/10 transition-all duration-500"></div>
+                                   
+                                   <div className="relative z-10 flex flex-col items-center gap-3">
+                                       <div className={`p-4 rounded-full transition-colors ${!systemEnabled ? 'bg-gray-700 text-gray-400' : (userVoterInfo?.voted && userVoterInfo?.vote === false ? 'bg-red-500 text-black' : 'bg-red-500/20 text-red-500 group-hover:bg-red-500 group-hover:text-black')}`}>
+                                           <XCircle size={32} />
+                                       </div>
+                                       <span className={`font-display font-bold text-lg tracking-wider ${!systemEnabled ? 'text-gray-500' : 'text-white'}`}>
+                                           {userVoterInfo?.voted && userVoterInfo?.vote === false ? 'VOTED NO' : (userVoterInfo?.voted ? 'SWITCH TO NO' : 'VOTE NO')}
+                                       </span>
+                                   </div>
+                               </button>
+                           </>
+                       )}
                        
-                        {/* WITHDRAW VOTE BUTTON */}
-                       {userVoterInfo?.voted && (
+                         {/* WITHDRAW VOTE BUTTON */}
+                        {userVoterInfo?.voted && !delegatedTo && !userVoterInfo?.votedByProxy && (
                            <div className="col-span-2 flex justify-center mt-2">
                                <button 
                                    onClick={handleWithdrawVote}

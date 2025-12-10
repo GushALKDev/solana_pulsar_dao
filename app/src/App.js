@@ -8,6 +8,7 @@ import DashboardLayout from './components/DashboardLayout';
 import './App.css';
 import Analytics from './components/Analytics';
 import Proposal from './components/Proposal';
+import DelegationPage from './components/DelegationPage';
 
 function App() {
   return (
@@ -19,6 +20,8 @@ function App() {
           <Route path="/proposal/:id" element={<Proposal />} />
           <Route path="/staking" element={<StakingPage />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/delegation" element={<DelegationPage />} />
           <Route path="/dao-admin" element={<TokenManager />} />
         </Routes>
       </DashboardLayout>

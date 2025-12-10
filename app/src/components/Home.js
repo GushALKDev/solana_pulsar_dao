@@ -12,10 +12,12 @@ import {
   programId,
   globalAccountPDAAddress, 
   globalStateSeed,
-  proposalSeed 
+  proposalSeed,
+  delegationRecordSeed,
+  delegateProfileSeed,
 } from '../config';
 import Star from './Star';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Users } from 'lucide-react';
 
 const Home = () => {
   const { connection } = useConnection();
@@ -28,6 +30,9 @@ const Home = () => {
   const [admin, setAdmin] = useState(null);
   
   const [votingPower, setVotingPower] = useState(0);
+  const [delegatedPower, setDelegatedPower] = useState(0); // Power delegated TO me
+  const [delegatedTo, setDelegatedTo] = useState(null); 
+  const [isDidDelegate, setIsDidDelegate] = useState(false); // Am I a delegate?
   const [tokenMint, setTokenMint] = useState(null);
   const [stats, setStats] = useState({ liquid: 0, staked: 0, multiplier: 1 });
   const [globalError, setGlobalError] = useState(null);
@@ -99,10 +104,79 @@ const Home = () => {
                const totalVP = Math.floor(Math.sqrt(liquidAmount)) + Math.floor(Math.sqrt(stakedAmount)) * multiplier;
                setVotingPower(totalVP);
                setStats({ liquid: liquidAmount, staked: stakedAmount, multiplier });
-           } else {
-               setVotingPower(0);
-               setStats({ liquid: 0, staked: 0, multiplier: 1 });
-           }
+
+                // C. Check Delegation Logic
+                try {
+                   const [delegationRecordPDA] = PublicKey.findProgramAddressSync(
+                       [Buffer.from(delegationRecordSeed), publicKey.toBuffer()],
+                       programId
+                   );
+                   const record = await votingProgram.account.delegationRecord.fetch(delegationRecordPDA);
+                   setDelegatedTo(record.delegateTarget.toString());
+                } catch(e) {
+                   setDelegatedTo(null);
+                }
+
+                // D. If I am a Delegate, calculate Delegated Power
+                // 1. Check if I have a profile
+                try {
+                     const [myProfilePDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from(delegateProfileSeed), publicKey.toBuffer()],
+                        programId
+                     );
+                     const profile = await votingProgram.account.delegateProfile.fetch(myProfilePDA);
+                     if (profile && profile.isActive) {
+                         setIsDidDelegate(true);
+                         
+                         // 2. Find all my delegators
+                         // Ideally use memcmp filter, but for now fetch all and filter JS side for simplicity/speed dev
+                         const allRecords = await votingProgram.account.delegationRecord.all();
+                         const myDelegators = allRecords.filter(r => r.account.delegateTarget.toString() === publicKey.toString());
+                         
+                         let totalDelegated = 0;
+                         
+                         // 3. For each delegator, calculate VP
+                         // Parallelize for speed
+                         await Promise.all(myDelegators.map(async (record) => {
+                             const delegatorPubkey = record.account.delegator;
+                             
+                             // Get Liquid
+                             let dLiquid = 0;
+                             try {
+                                 const dATA = await getAssociatedTokenAddress(new PublicKey(mintAddr), delegatorPubkey);
+                                 const dBal = await connection.getTokenAccountBalance(dATA);
+                                 dLiquid = dBal.value.uiAmount || 0;
+                             } catch(e) {}
+                             
+                             // Get Staked
+                             let dStaked = 0;
+                             let dMult = 1;
+                             try {
+                                 const [dStakePDA] = PublicKey.findProgramAddressSync(
+                                     [Buffer.from("stake_record"), delegatorPubkey.toBuffer()],
+                                     programId
+                                 );
+                                 const dStake = await votingProgram.account.voterStakeRecord.fetch(dStakePDA);
+                                 dStaked = parseFloat(dStake.stakedAmount.toString());
+                                 dMult = parseFloat(dStake.multiplier.toString());
+                             } catch(e) {}
+                             
+                             const dVP = Math.floor(Math.sqrt(dLiquid)) + Math.floor(Math.sqrt(dStaked)) * dMult;
+                             totalDelegated += dVP;
+                         }));
+                         
+                         setDelegatedPower(totalDelegated);
+                     }
+                } catch (e) {
+                    setIsDidDelegate(false);
+                }
+
+
+            } else {
+                setVotingPower(0);
+                setDelegatedTo(null);
+                setStats({ liquid: 0, staked: 0, multiplier: 1 });
+            }
 
            // 3. Fetch Proposals
            if (proposalsCounter > 0) {
@@ -196,11 +270,19 @@ const Home = () => {
                         {votingPower.toLocaleString()}
                     </h3>
                     <p className="text-pulsar-primary font-sans font-bold tracking-widest text-2xl">VOTES</p>
+
                     
-                    {/* Optional: Show mint status if error */}
-                    {globalError && <p className="text-red-500 text-xs mt-2">{globalError}</p>}
                 </div>
             </Star>
+            
+            {isDidDelegate && delegatedPower > 0 && (
+                <div className="mt-4 px-4 py-2 bg-[#14F195]/10 rounded-full border border-[#14F195]/20 z-10">
+                     <p className="text-sm text-[#14F195] flex items-center gap-2 font-bold">
+                         <Users size={16} />
+                         + {delegatedPower.toLocaleString()} from Community
+                     </p>
+                </div>
+            )}
         </div>
 
         {/* Breakdown Stats - RIGHT (Replcaing Chart) */}

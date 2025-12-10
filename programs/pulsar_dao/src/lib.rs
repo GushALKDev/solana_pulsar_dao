@@ -1,16 +1,16 @@
+#![allow(deprecated)]
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
-use std::str::FromStr;
+
 
 declare_id!("3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM");
 
 const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
 const PROPOSAL_SEED: &[u8] = b"proposal";
-const STAKE_RECORD_SEED: &[u8] = b"stake_record";
-const VOTER_SEED: &[u8] = b"voter";
-const VAULT_SEED: &[u8] = b"vault";
 const FAUCET_SEED: &[u8] = b"faucet";
+const DELEGATE_PROFILE_SEED: &[u8] = b"delegate_profile";
+const DELEGATION_RECORD_SEED: &[u8] = b"delegation_record";
 
 #[program]
 pub mod pulsar_dao {
@@ -18,9 +18,6 @@ pub mod pulsar_dao {
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
-
-        // Removed hardcoded deployer check allows any wallet to initialize
-        // The initializer becomes the admin automatically below
 
         global_account.admin = ctx.accounts.user.key();
         global_account.token_mint = ctx.accounts.token_mint.key();
@@ -31,9 +28,8 @@ pub mod pulsar_dao {
 
     pub fn toggle_circuit_breaker(ctx: Context<ToggleCircuitBreaker>) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
-        require_keys_eq!(
-            global_account.admin,
-            ctx.accounts.user.key(),
+        require!(
+            global_account.admin == ctx.accounts.user.key(),
             ErrorCode::Unauthorized
         );
         global_account.system_enabled = !global_account.system_enabled;
@@ -42,15 +38,7 @@ pub mod pulsar_dao {
 
     pub fn admin_mint(ctx: Context<AdminMint>, amount: u64) -> Result<()> {
         // Mint to target. Authority is Global Account PDA
-        
-        // Calculate amount with decimals (assuming input is "human readable" amount, or raw? 
-        // User request usually implies raw if not specified, but for consistency with request_tokens which does 3000 * 10^decimals...
-        // Let's look at TokenManager.js usages. It usually handles decimals or passes raw?
-        // TokenManager sends "mintAmount" (e.g. 100). If we want consistency, we should multiply by decimals here 
-        // OR the frontend handles it. 
-        // In request_tokens, we did: 3000 * 10u64.pow(decimals).
-        // Let's do the same here for ease of use from "human" numbers in the admin panel.
-        
+
         let amount_with_decimals = amount.checked_mul(10u64.pow(ctx.accounts.token_mint.decimals as u32)).unwrap();
 
         token::mint_to(
@@ -124,8 +112,6 @@ pub mod pulsar_dao {
 
         Ok(())
     }
-    
-    // ...
 
     pub fn vote(ctx: Context<VoteProposal>, vote_yes: bool) -> Result<()> {
         let global_account = &ctx.accounts.global_account;
@@ -133,13 +119,17 @@ pub mod pulsar_dao {
 
         let proposal_account = &mut ctx.accounts.proposal_account;
         let voter_record = &mut ctx.accounts.voter_record;
-        let stake_record = &ctx.accounts.stake_record;
+
         let user_token_account = &ctx.accounts.user_token_account;
         let clock = Clock::get()?;
 
         require!(proposal_account.is_active, ErrorCode::ProposalNotActive);
         require!(clock.unix_timestamp <= proposal_account.deadline, ErrorCode::ProposalExpired);
         
+        // Security: Prevent double voting.
+        // If the user has delegated their power (record exists), they cannot vote directly.
+        require!(ctx.accounts.delegation_record.data_is_empty(), ErrorCode::DelegatorsCannotVote);
+
         // Liquid Power
         let liquid_amount = user_token_account.amount;
         let liquid_power = (liquid_amount as f64).sqrt() as u64;
@@ -159,7 +149,10 @@ pub mod pulsar_dao {
         require!(total_voting_power > 0, ErrorCode::NoVotingPower);
 
         if voter_record.voted {
-            // Check if trying to vote for the same option
+            // Proxy votes are locked and cannot be modified by the user.
+            require!(!voter_record.voted_by_proxy, ErrorCode::ProxyVoteLocked);
+            
+            // Direct vote: prevent voting for the same option again (must switch).
             require!(voter_record.vote != vote_yes, ErrorCode::AlreadyVoted);
 
             // Remove old vote weight
@@ -180,6 +173,7 @@ pub mod pulsar_dao {
             voter_record.vote = vote_yes;
             voter_record.voting_power = total_voting_power;
             voter_record.staked_amount = staked_amount;
+            voter_record.voted_by_proxy = false; // User reclamation
 
         } else {
             // First time vote
@@ -221,6 +215,9 @@ pub mod pulsar_dao {
         require!(clock.unix_timestamp <= proposal_account.deadline, ErrorCode::ProposalExpired);
 
         if voter_record.voted {
+            // Enforce Proxy Lock
+            require!(!voter_record.voted_by_proxy, ErrorCode::ProxyVoteLocked);
+
             if voter_record.vote {
                 proposal_account.yes = proposal_account.yes.checked_sub(voter_record.voting_power).unwrap();
             } else {
@@ -320,6 +317,168 @@ pub mod pulsar_dao {
         
         Ok(())
     }
+
+    pub fn register_delegate(ctx: Context<RegisterDelegate>) -> Result<()> {
+        let global_account = &ctx.accounts.global_account;
+        require!(global_account.admin == ctx.accounts.admin.key(), ErrorCode::Unauthorized);
+
+        let delegate_profile = &mut ctx.accounts.delegate_profile;
+        let delegation_record = &ctx.accounts.user_delegation_record;
+        
+        // Prevent Delegator -> Delegate (Must not be a delegator)
+        let is_delegator = delegation_record.to_account_info().lamports() > 0 && delegation_record.owner == ctx.program_id;
+        require!(!is_delegator, ErrorCode::DelegatorCannotBeDelegate);
+
+        delegate_profile.authority = ctx.accounts.target_user.key();
+        delegate_profile.is_active = true;
+        
+        Ok(())
+    }
+
+    pub fn delegate_vote(ctx: Context<DelegateVote>) -> Result<()> {
+        let delegation_record = &mut ctx.accounts.delegation_record;
+        let delegate_profile = &ctx.accounts.user_delegate_profile;
+
+        // Prevent Delegate -> Delegate (Chain)
+        let is_delegate = delegate_profile.to_account_info().lamports() > 0 && delegate_profile.owner == ctx.program_id;
+        require!(!is_delegate, ErrorCode::DelegateCannotDelegate);
+        
+        // Security: Prevent self-delegation
+        require!(ctx.accounts.user.key() != ctx.accounts.target_delegate.key(), ErrorCode::DelegationLoop);
+
+        delegation_record.delegator = ctx.accounts.user.key();
+        delegation_record.delegate_target = ctx.accounts.target_delegate.key(); // This is just the Pubkey of the User
+
+        Ok(())
+    }
+
+    pub fn revoke_delegation(_ctx: Context<RevokeDelegation>) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn remove_delegate(_ctx: Context<RemoveDelegate>) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn vote_as_proxy(ctx: Context<VoteAsProxy>, vote_yes: bool) -> Result<()> {
+        let global_account = &ctx.accounts.global_account;
+        require!(global_account.system_enabled, ErrorCode::CircuitBreakerTripped);
+
+        // Security: Check if Delegate Profile exists and is active for the SIGNER
+        require!(ctx.accounts.delegate_profile.is_active, ErrorCode::InvalidDelegate);
+        require!(ctx.accounts.delegate_profile.authority == ctx.accounts.proxy_authority.key(), ErrorCode::Unauthorized);
+
+        // Security: Check Delegation Record
+        let delegation_record = &ctx.accounts.delegation_record;
+        require!(delegation_record.delegator == ctx.accounts.delegator_user.key(), ErrorCode::Unauthorized);
+        require!(delegation_record.delegate_target == ctx.accounts.proxy_authority.key(), ErrorCode::Unauthorized);
+
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        let voter_record = &mut ctx.accounts.voter_record;
+        let clock = Clock::get()?;
+
+        require!(proposal_account.is_active, ErrorCode::ProposalNotActive);
+        require!(clock.unix_timestamp <= proposal_account.deadline, ErrorCode::ProposalExpired);
+       
+        // --- Calculate Power (Delegator's Power) ---
+        let liquid_amount = ctx.accounts.delegator_token_account.amount;
+        let liquid_power = (liquid_amount as f64).sqrt() as u64;
+
+        let (staked_amount, multiplier) = if let Some(stake_record) = &ctx.accounts.delegator_stake_record {
+            (stake_record.staked_amount, stake_record.multiplier)
+        } else {
+            (0, 1)
+        };
+
+        let staked_sqrt = (staked_amount as f64).sqrt() as u64;
+        let staked_power = staked_sqrt.checked_mul(multiplier).unwrap_or(0);
+        let total_voting_power = liquid_power.checked_add(staked_power).unwrap();
+
+        require!(total_voting_power > 0, ErrorCode::NoVotingPower);
+
+        // --- Apply Vote ---
+        if voter_record.voted {
+             // Changing vote (Proxy override or Proxy update)
+             require!(voter_record.vote != vote_yes, ErrorCode::AlreadyVoted);
+             
+             if voter_record.vote {
+                 proposal_account.yes = proposal_account.yes.checked_sub(voter_record.voting_power).unwrap();
+             } else {
+                 proposal_account.no = proposal_account.no.checked_sub(voter_record.voting_power).unwrap();
+             }
+
+             if vote_yes {
+                 proposal_account.yes = proposal_account.yes.checked_add(total_voting_power).unwrap();
+             } else {
+                 proposal_account.no = proposal_account.no.checked_add(total_voting_power).unwrap();
+             }
+        } else {
+             // New Vote
+             if vote_yes {
+                 proposal_account.yes = proposal_account.yes.checked_add(total_voting_power).unwrap();
+             } else {
+                 proposal_account.no = proposal_account.no.checked_add(total_voting_power).unwrap();
+             }
+        }
+
+        // Update Record
+        voter_record.proposal = proposal_account.key();
+        voter_record.voter = ctx.accounts.delegator_user.key(); // The Record belongs to the DELEGATOR
+        voter_record.vote = vote_yes;
+        voter_record.voted = true;
+        voter_record.voting_power = total_voting_power;
+        voter_record.staked_amount = staked_amount;
+        voter_record.voted_by_proxy = true; // Mark as proxy vote
+
+        emit!(VoteCast {
+            voter: ctx.accounts.delegator_user.key(),
+            proposal: proposal_account.key(),
+            amount: staked_amount,
+            lock_duration: if let Some(r) = &ctx.accounts.delegator_stake_record { r.original_lock_days } else { 0 },
+            voting_power: total_voting_power,
+            multiplier: multiplier,
+        });
+
+        Ok(())
+    }
+
+    pub fn withdraw_as_proxy(ctx: Context<WithdrawAsProxy>) -> Result<()> {
+        let global_account = &ctx.accounts.global_account;
+        require!(global_account.system_enabled, ErrorCode::CircuitBreakerTripped);
+
+        // Security: Check Delegate
+        require!(ctx.accounts.delegate_profile.is_active, ErrorCode::InvalidDelegate);
+        require!(ctx.accounts.delegate_profile.authority == ctx.accounts.proxy_authority.key(), ErrorCode::Unauthorized);
+
+        // Security: Check Delegation
+        let delegation_record = &ctx.accounts.delegation_record;
+        require!(delegation_record.delegator == ctx.accounts.delegator_user.key(), ErrorCode::Unauthorized);
+        require!(delegation_record.delegate_target == ctx.accounts.proxy_authority.key(), ErrorCode::Unauthorized);
+
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        let voter_record = &mut ctx.accounts.voter_record;
+        let clock = Clock::get()?;
+
+        require!(proposal_account.is_active, ErrorCode::ProposalNotActive);
+        require!(clock.unix_timestamp <= proposal_account.deadline, ErrorCode::ProposalExpired);
+
+        if voter_record.voted {
+            // Withdraw Logic
+            if voter_record.vote {
+                proposal_account.yes = proposal_account.yes.checked_sub(voter_record.voting_power).unwrap();
+            } else {
+                proposal_account.no = proposal_account.no.checked_sub(voter_record.voting_power).unwrap();
+            }
+
+            voter_record.voted = false;
+            voter_record.voting_power = 0;
+            voter_record.voted_by_proxy = false; // Reset
+        } else {
+             // If not voted, nothing to withdraw. Just OK.
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -356,7 +515,6 @@ pub struct CreateProposal<'info> {
         mut,
         seeds = [GLOBAL_ACCOUNT_SEED],
         bump,
-        constraint = global_account.admin == author.key() @ ErrorCode::Unauthorized
     )]
     pub global_account: Account<'info, GlobalAccount>,
     #[account(
@@ -538,6 +696,13 @@ pub struct VoteProposal<'info> {
         constraint = user_token_account.owner == user.key() @ ErrorCode::Unauthorized
     )]
     pub user_token_account: Account<'info, TokenAccount>,
+    
+    /// CHECK: Checked in instruction to ensure user is NOT delegating
+    #[account(
+        seeds = [DELEGATION_RECORD_SEED, user.key().as_ref()],
+        bump
+    )]
+    pub delegation_record: UncheckedAccount<'info>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -583,6 +748,195 @@ pub struct ProposalAccount {
     pub is_active: bool,
 }
 
+#[derive(Accounts)]
+pub struct RegisterDelegate<'info> {
+    #[account(
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+    
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + 32 + 1,
+        seeds = [DELEGATE_PROFILE_SEED, target_user.key().as_ref()],
+        bump
+    )]
+    pub delegate_profile: Account<'info, DelegateProfile>,
+    
+    /// CHECK: The user being promoted to delegate status
+    pub target_user: UncheckedAccount<'info>,
+    
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    
+    /// CHECK: Validation check - Ensure target is not already a Delegator
+    #[account(
+        seeds = [DELEGATION_RECORD_SEED, target_user.key().as_ref()],
+        bump
+    )]
+    pub user_delegation_record: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct DelegateVote<'info> {
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = 8 + 32 + 32,
+        seeds = [DELEGATION_RECORD_SEED, user.key().as_ref()],
+        bump
+    )]
+    pub delegation_record: Account<'info, DelegationRecord>,
+    
+    /// CHECK: The target delegate
+    pub target_delegate: UncheckedAccount<'info>,
+
+    /// CHECK: Validation check - Ensure User is not a Delegate (No chaining)
+    #[account(
+        seeds = [DELEGATE_PROFILE_SEED, user.key().as_ref()],
+        bump
+    )]
+    pub user_delegate_profile: UncheckedAccount<'info>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RevokeDelegation<'info> {
+    #[account(
+        mut,
+        seeds = [DELEGATION_RECORD_SEED, user.key().as_ref()],
+        bump,
+        close = user
+    )]
+    pub delegation_record: Account<'info, DelegationRecord>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RemoveDelegate<'info> {
+    #[account(
+        mut,
+        seeds = [DELEGATE_PROFILE_SEED, target_user.key().as_ref()],
+        bump,
+        close = admin
+    )]
+    pub delegate_profile: Account<'info, DelegateProfile>,
+
+    /// CHECK: The user whose delegate status is being revoked
+    pub target_user: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    
+    #[account(
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+        has_one = admin
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+}
+
+#[derive(Accounts)]
+pub struct VoteAsProxy<'info> {
+    #[account(
+        seeds = [b"global_account"],
+        bump
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+    
+    #[account(mut)]
+    pub proposal_account: Account<'info, ProposalAccount>,
+
+    #[account(
+        seeds = [DELEGATE_PROFILE_SEED, proxy_authority.key().as_ref()],
+        bump,
+    )]
+    pub delegate_profile: Account<'info, DelegateProfile>,
+
+    #[account(
+        seeds = [DELEGATION_RECORD_SEED, delegator_user.key().as_ref()],
+        bump,
+    )]
+    pub delegation_record: Account<'info, DelegationRecord>,
+
+    #[account(
+        init_if_needed,
+        payer = proxy_authority, // Proxy pays for the transaction
+        space = 8 + 32 + 32 + 1 + 1 + 8 + 8 + 1 + 8, // Extended space for new field
+        seeds = [b"voter", proposal_account.key().as_ref(), delegator_user.key().as_ref()],
+        bump
+    )]
+    pub voter_record: Account<'info, VoterRecord>,
+
+    /// CHECK: We just read amount/owner. Verified by constraints.
+    #[account(
+        constraint = delegator_token_account.mint == global_account.token_mint @ ErrorCode::InvalidTokenAccount,
+        constraint = delegator_token_account.owner == delegator_user.key() @ ErrorCode::Unauthorized
+    )]
+    pub delegator_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_record", delegator_user.key().as_ref()],
+        bump,
+    )]
+    pub delegator_stake_record: Option<Account<'info, VoterStakeRecord>>,
+
+    /// CHECK: The user who is being voted FOR. They don't sign.
+    pub delegator_user: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub proxy_authority: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawAsProxy<'info> {
+    #[account(
+        seeds = [b"global_account"],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+
+    #[account(mut)]
+    pub proposal_account: Account<'info, ProposalAccount>,
+
+    #[account(
+        seeds = [b"delegate_profile", proxy_authority.key().as_ref()],
+        bump,
+    )]
+    pub delegate_profile: Account<'info, DelegateProfile>,
+
+    #[account(
+        seeds = [DELEGATION_RECORD_SEED, delegator_user.key().as_ref()],
+        bump,
+    )]
+    pub delegation_record: Account<'info, DelegationRecord>,
+
+    #[account(
+        mut,
+        seeds = [b"voter", proposal_account.key().as_ref(), delegator_user.key().as_ref()],
+        bump
+    )]
+    pub voter_record: Account<'info, VoterRecord>,
+
+    /// CHECK: User verified by delegation record
+    pub delegator_user: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub proxy_authority: Signer<'info>,
+}
+
 #[account]
 pub struct VoterRecord {
     pub proposal: Pubkey,
@@ -591,6 +945,19 @@ pub struct VoterRecord {
     pub voted: bool,
     pub voting_power: u64,
     pub staked_amount: u64,
+    pub voted_by_proxy: bool,
+}
+
+#[account]
+pub struct DelegateProfile {
+    pub authority: Pubkey,
+    pub is_active: bool,
+}
+
+#[account]
+pub struct DelegationRecord {
+    pub delegator: Pubkey,
+    pub delegate_target: Pubkey,
 }
 
 #[account]
@@ -635,6 +1002,20 @@ pub enum ErrorCode {
     InvalidLockDuration,
     #[msg("You must wait 24 hours between faucet requests.")]
     FaucetCooldown,
+    #[msg("Delegate is not authorized or inactive.")]
+    InvalidDelegate,
+    #[msg("User has already voted directly. Proxy cannot override.")]
+    DirectVoteExists,
+    #[msg("Delegation loop detected.")]
+    DelegationLoop,
+    #[msg("Delegates cannot delegate (Chain delegation is not allowed).")]
+    DelegateCannotDelegate,
+    #[msg("Delegators cannot become delegates (Revoke delegation first).")]
+    DelegatorCannotBeDelegate,
+    #[msg("You have delegated your voting power. Revoke delegation to vote manually.")]
+    DelegatorsCannotVote,
+    #[msg("Vote was cast by proxy and is locked (cannot be withdrawn or changed).")]
+    ProxyVoteLocked,
 }
 
 #[event]

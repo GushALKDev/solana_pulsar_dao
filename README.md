@@ -66,6 +66,13 @@ Every proposal is created with a specific, immutable deadline to ensure timely g
 - **Switch Vote:** specific support allows users to change their opinion (e.g., YES → NO) dynamically while the proposal is active.
 - **Withdraw Vote:** Users can retract their vote entirely to reclaim their governance weight or correct mistakes.
 
+### 💧 Liquid Delegation
+A powerful yet secure delegation system allowing users to trust experts with their governance power.
+- **1-Hop Delegation:** Strictly enforces direct delegation (A → B). Chain delegation (A → B → C) is blocked to prevent centralization loops.
+- **Exclusive Voting:** Delegators forfeit their right to vote directly while delegation is active.
+- **Proxy Lock (Security):** If your Delegate casts a vote on your behalf, that vote is **LOCKED** for the duration of the proposal. Even if you revoke delegation, you cannot withdraw or change that specific vote.
+- **Batch Processing:** Delegates can cast or withdraw votes for all their delegators in a single, gas-efficient transaction.
+
 ### 🛡️ Circuit Breaker (Safety Module)
 An admin-controlled "Emergency Stop" system. If a critical vulnerability is detected, the **Circuit Breaker** can be tripped to instantly pause all voting and withdrawal actions, protecting DAO assets.
 
@@ -77,9 +84,8 @@ A real-time analytics hub provides deep insights into DAO activity:
 - **Top Proposals:** Leaderboard of the most engaged proposals.
 
 ### 👮 Admin & Security
-- **Restricted Access:** Only the DAO Admin (initializer) can create new proposals, enforced by both:
-    - **Smart Contract:** Strict `constraint` checks preventing unauthorized instruction calls.
-    - **Frontend:** Route protection that redirects unauthorized wallets.
+- **Open Access (Testing):** To facilitate community testing, **Proposal Creation is currently OPEN to all users**.
+    - Originally, this was restricted to the DAO Admin, but the constraint has been lifted for the hackathon/demo phase.
 - **Circuit Breaker:** Admin can pause the entire system in emergencies.
 
 ---
@@ -135,7 +141,7 @@ A real-time analytics hub provides deep insights into DAO activity:
 
 ### ✅ Comprehensive Testing
 
-We maintain a rigorous test suite (`tests/pulsar_dao.ts`) that verifies 12 critical scenarios to ensure system integrity:
+We maintain a rigorous test suite (`tests/pulsar_dao.ts`) that verifies 19 critical scenarios to ensure system integrity:
 
 *   **Global State:** Verifies correct initialization of the DAO parameters.
 *   **Staking Logic:**
@@ -152,6 +158,13 @@ We maintain a rigorous test suite (`tests/pulsar_dao.ts`) that verifies 12 criti
     *   Simulates Admin disabling the system.
     *   Verifies Users are blocked from voting.
     *   Simulates System restoration.
+*   **Liquid Delegation:**
+    *   **Registration:** Verifies Delegate Profile creation.
+    *   **Delegation:** Tests secure 1-hop delegation setup.
+    *   **Exclusivity:** Confirms Delegators are blocked from manual voting.
+    *   **Proxy Voting:** Validates Delegates voting on behalf of others.
+    *   **Proxy Lock:** Ensures proxy votes cannot be withdrawn by the delegator (Security).
+    *   **Revocation:** Tests clean removal of delegation rights.
 
 **Run the full suite:**
 ```bash

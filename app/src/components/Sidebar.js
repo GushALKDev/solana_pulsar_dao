@@ -126,12 +126,13 @@ const Sidebar = () => {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Lock, label: 'Staking', path: '/staking', badge: 'BOOST' },
+    { icon: Shield, label: 'Delegation', path: '/delegation' },
     { icon: FileText, label: 'Analytics', path: '/analytics' },
   ];
 
   // Add Admin item conditionally
   if (publicKey && (publicKey.toString() === upgradeAuthority || (admin && publicKey.toString() === admin))) {
-      menuItems.push({ icon: Coins, label: 'DAO Admin', path: '/dao-admin', badge: 'ADMIN' });
+      menuItems.unshift({ icon: Coins, label: 'DAO Admin', path: '/dao-admin', badge: 'ADMIN' });
   }
 
   return (

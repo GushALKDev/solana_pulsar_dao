@@ -143,6 +143,100 @@
       ]
     },
     {
+      "name": "delegate_vote",
+      "discriminator": [
+        12,
+        116,
+        204,
+        68,
+        87,
+        205,
+        40,
+        205
+      ],
+      "accounts": [
+        {
+          "name": "delegation_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_delegate"
+        },
+        {
+          "name": "user_delegate_profile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "deposit_tokens",
       "discriminator": [
         176,
@@ -355,6 +449,212 @@
       "args": []
     },
     {
+      "name": "register_delegate",
+      "discriminator": [
+        218,
+        45,
+        12,
+        33,
+        195,
+        89,
+        89,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "delegate_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "target_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_user"
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_delegation_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "target_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "remove_delegate",
+      "discriminator": [
+        94,
+        37,
+        16,
+        59,
+        7,
+        84,
+        97,
+        211
+      ],
+      "accounts": [
+        {
+          "name": "delegate_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "target_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_user"
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "global_account"
+          ]
+        },
+        {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "request_tokens",
       "discriminator": [
         97,
@@ -527,6 +827,61 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "revoke_delegation",
+      "discriminator": [
+        188,
+        92,
+        135,
+        67,
+        160,
+        181,
+        54,
+        62
+      ],
+      "accounts": [
+        {
+          "name": "delegation_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
         }
       ],
       "args": []
@@ -769,6 +1124,39 @@
           "name": "user_token_account"
         },
         {
+          "name": "delegation_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
           "name": "user",
           "writable": true,
           "signer": true
@@ -784,6 +1172,338 @@
           "type": "bool"
         }
       ]
+    },
+    {
+      "name": "vote_as_proxy",
+      "discriminator": [
+        221,
+        115,
+        238,
+        179,
+        63,
+        127,
+        87,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_account",
+          "writable": true
+        },
+        {
+          "name": "delegate_profile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proxy_authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "delegation_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "delegator_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proposal_account"
+              },
+              {
+                "kind": "account",
+                "path": "delegator_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "delegator_token_account"
+        },
+        {
+          "name": "delegator_stake_record",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "delegator_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "delegator_user"
+        },
+        {
+          "name": "proxy_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "vote_yes",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_as_proxy",
+      "discriminator": [
+        11,
+        45,
+        37,
+        201,
+        57,
+        46,
+        83,
+        23
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_account",
+          "writable": true
+        },
+        {
+          "name": "delegate_profile",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proxy_authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "delegation_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "delegator_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proposal_account"
+              },
+              {
+                "kind": "account",
+                "path": "delegator_user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "delegator_user"
+        },
+        {
+          "name": "proxy_authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
     },
     {
       "name": "withdraw_vote",
@@ -864,6 +1584,32 @@
     }
   ],
   "accounts": [
+    {
+      "name": "DelegateProfile",
+      "discriminator": [
+        68,
+        156,
+        35,
+        24,
+        48,
+        182,
+        135,
+        80
+      ]
+    },
+    {
+      "name": "DelegationRecord",
+      "discriminator": [
+        203,
+        185,
+        161,
+        226,
+        129,
+        251,
+        132,
+        155
+      ]
+    },
     {
       "name": "FaucetRecord",
       "discriminator": [
@@ -1010,9 +1756,76 @@
       "code": 6012,
       "name": "FaucetCooldown",
       "msg": "You must wait 24 hours between faucet requests."
+    },
+    {
+      "code": 6013,
+      "name": "InvalidDelegate",
+      "msg": "Delegate is not authorized or inactive."
+    },
+    {
+      "code": 6014,
+      "name": "DirectVoteExists",
+      "msg": "User has already voted directly. Proxy cannot override."
+    },
+    {
+      "code": 6015,
+      "name": "DelegationLoop",
+      "msg": "Delegation loop detected."
+    },
+    {
+      "code": 6016,
+      "name": "DelegateCannotDelegate",
+      "msg": "Delegates cannot delegate (Chain delegation is not allowed)."
+    },
+    {
+      "code": 6017,
+      "name": "DelegatorCannotBeDelegate",
+      "msg": "Delegators cannot become delegates (Revoke delegation first)."
+    },
+    {
+      "code": 6018,
+      "name": "DelegatorsCannotVote",
+      "msg": "You have delegated your voting power. Revoke delegation to vote manually."
+    },
+    {
+      "code": 6019,
+      "name": "ProxyVoteLocked",
+      "msg": "Vote was cast by proxy and is locked (cannot be withdrawn or changed)."
     }
   ],
   "types": [
+    {
+      "name": "DelegateProfile",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelegationRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "delegator",
+            "type": "pubkey"
+          },
+          {
+            "name": "delegate_target",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
     {
       "name": "FaucetRecord",
       "type": {
@@ -1145,6 +1958,10 @@
           {
             "name": "staked_amount",
             "type": "u64"
+          },
+          {
+            "name": "voted_by_proxy",
+            "type": "bool"
           }
         ]
       }

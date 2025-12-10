@@ -12,8 +12,7 @@ const CreateProposal = () => {
   const [proposalQuestion, setProposalQuestion] = useState('');
   const [duration, setDuration] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [checkingAdmin, setCheckingAdmin] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+
   const [createSuccess, setCreateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
@@ -24,34 +23,7 @@ const CreateProposal = () => {
     return buffer;
   }
 
-  // Check Admin Permissions
-  React.useEffect(() => {
-      const checkAdmin = async () => {
-          if (!publicKey) {
-              setCheckingAdmin(false);
-              return;
-          }
 
-          try {
-             const votingProgram = program({ publicKey });
-             const globalAccount = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
-             const adminKey = globalAccount.admin.toString();
-             
-             if (adminKey === publicKey.toString()) {
-                 setIsAdmin(true);
-             } else {
-                 navigate('/'); // Redirect non-admins immediately
-             }
-          } catch(e) {
-             console.error("Admin check failed", e);
-             navigate('/');
-          } finally {
-             setCheckingAdmin(false);
-          }
-      };
-      
-      checkAdmin();
-  }, [publicKey, navigate]);
 
 
   const createNewProposal = async () => {
@@ -132,15 +104,7 @@ const CreateProposal = () => {
     }
   };
   
-  if (checkingAdmin) {
-      return (
-          <div className="flex justify-center items-center min-h-[400px]">
-              <Loader2 className="animate-spin text-pulsar-primary w-8 h-8"/>
-          </div>
-      );
-  }
 
-  if (!isAdmin) return null; // Should have redirected by now
 
   return (
     <div className="bg-[#0f1117] rounded-2xl p-8 border border-white/10 backdrop-blur-sm max-w-2xl mx-auto relative overflow-hidden">

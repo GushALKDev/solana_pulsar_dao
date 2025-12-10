@@ -95,7 +95,8 @@ const Home = () => {
                     multiplier = record.multiplier.toNumber();
                } catch(e) { /* No stake record -> 0 */ }
                
-               const totalVP = Math.round(Math.sqrt(liquidAmount) + Math.sqrt(stakedAmount) * multiplier);
+               // Match Rust: floor(sqrt(liquid)) + floor(sqrt(staked)) * multiplier
+               const totalVP = Math.floor(Math.sqrt(liquidAmount)) + Math.floor(Math.sqrt(stakedAmount)) * multiplier;
                setVotingPower(totalVP);
                setStats({ liquid: liquidAmount, staked: stakedAmount, multiplier });
            } else {
@@ -216,7 +217,7 @@ const Home = () => {
                     <div className="text-right">
                         <p className="text-pulsar-secondary text-sm font-bold">Base Power</p>
                         <p className="text-white text-lg font-mono">
-                           <span className="text-gray-500 text-sm">√{stats.liquid} ≈</span> {Math.round(Math.sqrt(stats.liquid))}
+                           <span className="text-gray-500 text-sm">√{stats.liquid} ≈</span> {Math.floor(Math.sqrt(stats.liquid))}
                         </p>
                     </div>
                 </div>
@@ -241,7 +242,7 @@ const Home = () => {
                     <div className="text-right">
                         <p className="text-emerald-400 text-sm font-bold">Staked Power</p>
                         <p className="text-white text-lg font-mono">
-                           <span className="text-gray-500 text-sm">√{stats.staked} × {stats.staked > 0 ? stats.multiplier : 1} ≈</span> {Math.round(Math.sqrt(stats.staked) * (stats.staked > 0 ? stats.multiplier : 1))}
+                           <span className="text-gray-500 text-sm">√{stats.staked} × {stats.staked > 0 ? stats.multiplier : 1} ≈</span> {Math.floor(Math.sqrt(stats.staked)) * (stats.staked > 0 ? stats.multiplier : 1)}
                         </p>
                     </div>
                 </div>

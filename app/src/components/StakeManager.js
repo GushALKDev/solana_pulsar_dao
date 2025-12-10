@@ -106,18 +106,18 @@ const StakeManager = ({ tokenMintAddress }) => {
         const futureStaked = currentStaked + inputAmount;
         const multiplier = getMultiplier(lockPeriod);
 
-        const liquidPower = Math.sqrt(futureLiquid);
-        const stakedBase = Math.sqrt(futureStaked);
-        const stakedPower = stakedBase * multiplier;
+        const liquidPower = Math.floor(Math.sqrt(futureLiquid)); // Rust: sqrt() as u64
+        const stakedBase = Math.floor(Math.sqrt(futureStaked));  // Rust: sqrt() as u64
+        const stakedPower = stakedBase * multiplier; // Rust: * multiplier
 
         return {
-            total: Math.round(liquidPower + stakedPower),
-            liquidVP: Math.round(liquidPower),
-            stakedVP: Math.round(stakedPower),
+            total: liquidPower + stakedPower, // Rust: checked_add
+            liquidVP: liquidPower,
+            stakedVP: stakedPower,
             futureLiquid,
             futureStaked,
             multiplier,
-            stakedBaseVP: Math.round(stakedBase)
+            stakedBaseVP: stakedBase
         };
     };
 
@@ -371,10 +371,10 @@ const StakeManager = ({ tokenMintAddress }) => {
                         {/* COMPARISON HEADER */}
                         <div className="flex items-baseline gap-3 mb-4 font-mono">
                              <span className="text-gray-500 line-through text-lg">
-                                {stakeRecord 
-                                 ? (Math.round(Math.sqrt(parseFloat(userBalance) || 0) + Math.sqrt(stakeRecord.stakedAmount.toString()) * stakeRecord.multiplier.toNumber())).toLocaleString()
-                                 : Math.round(Math.sqrt(parseFloat(userBalance) || 0)).toLocaleString()
-                                }
+                                 {stakeRecord 
+                                  ? (Math.floor(Math.sqrt(parseFloat(userBalance) || 0)) + Math.floor(Math.sqrt(stakeRecord.stakedAmount.toString())) * stakeRecord.multiplier.toNumber()).toLocaleString()
+                                  : Math.floor(Math.sqrt(parseFloat(userBalance) || 0)).toLocaleString()
+                                 }
                              </span>
                              <span className="text-gray-500">→</span>
                              <span className="text-3xl font-bold text-white text-glow">
@@ -434,8 +434,8 @@ const StakeManager = ({ tokenMintAddress }) => {
                                 <div className="text-right">
                                     <div className="text-2xl font-bold text-white text-glow">
                                          {stakeRecord 
-                                         ? (Math.round(Math.sqrt(parseFloat(userBalance) || 0) + Math.sqrt(stakeRecord.stakedAmount.toString()) * stakeRecord.multiplier.toNumber())).toLocaleString()
-                                         : Math.round(Math.sqrt(parseFloat(userBalance) || 0)).toLocaleString()
+                                         ? (Math.floor(Math.sqrt(parseFloat(userBalance) || 0)) + Math.floor(Math.sqrt(stakeRecord.stakedAmount.toString())) * stakeRecord.multiplier.toNumber()).toLocaleString()
+                                         : Math.floor(Math.sqrt(parseFloat(userBalance) || 0)).toLocaleString()
                                          }
                                     </div>
                                     <div className="text-xs text-emerald-400 flex items-center justify-end gap-1">

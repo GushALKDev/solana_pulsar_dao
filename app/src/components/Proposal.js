@@ -56,9 +56,10 @@ const Proposal = () => {
                      multiplier = parseFloat(record.multiplier.toString());
                  } catch(e) {}
                  
-                 const liquidPower = Math.sqrt(liquidAmount);
-                 const stakedPower = Math.sqrt(stakedAmount) * multiplier;
-                 setVotingPower(Math.round(liquidPower + stakedPower));
+                 // Mimic Rust's integer arithmetic exactly: floor(sqrt(a)) + floor(sqrt(b)) * m
+                 const liquidPower = Math.floor(Math.sqrt(liquidAmount));
+                 const stakedPower = Math.floor(Math.sqrt(stakedAmount)) * multiplier;
+                 setVotingPower(liquidPower + stakedPower);
                  
             } catch(e) { console.error("Error fetching VP", e); }
         };
@@ -114,7 +115,13 @@ const Proposal = () => {
                     );
                     try {
                         const record = await votingProgram.account.voterRecord.fetch(voterRecordPDA);
-                        setUserVoterInfo({ voted: record.voted, vote: record.vote });
+                        console.log("Voter Record Fetched:", record);
+                        const vp = record.votingPower ? record.votingPower.toString() : (record.voting_power ? record.voting_power.toString() : "0");
+                        setUserVoterInfo({ 
+                            voted: record.voted, 
+                            vote: record.vote,
+                            votingPower: vp
+                        });
                     } catch (err) {
                         setUserVoterInfo(null);
                     }
@@ -213,7 +220,9 @@ const Proposal = () => {
             setTimeout(() => setVoteSuccess(false), 2000);
             
             // Optimistic Update
-            setUserVoterInfo({ voted: true, vote: voteYes });
+             // We can't know exact new power without refetching, but usually it matches current VP
+             // For now, trigger a refetch of everything by navigating or just waiting for poll
+            setUserVoterInfo({ voted: true, vote: voteYes, votingPower: votingPower });
 
         } catch (e) {
             console.error("Vote Error:", e);
@@ -377,9 +386,14 @@ const Proposal = () => {
                {publicKey && isActive && (
                    <div className="flex justify-center mb-8 relative z-10">
                         <div className="px-6 py-2 bg-white/5 border border-white/10 rounded-full flex items-center gap-3">
-                             <span className="text-gray-400 text-sm font-medium">Your Voting Power:</span>
+                             <span className="text-gray-400 text-sm font-medium">
+                                {userVoterInfo?.voted ? "Confirmed Power:" : "Your Voting Power:"}
+                             </span>
                              <span className="text-2xl font-bold font-display text-white text-glow">
-                                {votingPower !== null ? votingPower.toLocaleString() : '...'} ⚡
+                                {userVoterInfo?.voted 
+                                    ? Number(userVoterInfo.votingPower).toLocaleString() 
+                                    : (votingPower !== null ? votingPower.toLocaleString() : '...')
+                                } ⚡
                              </span>
                         </div>
                    </div>

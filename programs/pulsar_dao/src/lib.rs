@@ -1,14 +1,16 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::associated_token::AssociatedToken;
 use std::str::FromStr;
 
-declare_id!("DPvVAgTnp6DhWvCgE3ADKEjLArgJgM4ZE9SRj1Dg7KLY");
+declare_id!("3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM");
 
-const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account_v3";
+const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
 const PROPOSAL_SEED: &[u8] = b"proposal";
 const STAKE_RECORD_SEED: &[u8] = b"stake_record";
 const VOTER_SEED: &[u8] = b"voter";
 const VAULT_SEED: &[u8] = b"vault";
+const FAUCET_SEED: &[u8] = b"faucet";
 
 #[program]
 pub mod pulsar_dao {
@@ -16,13 +18,9 @@ pub mod pulsar_dao {
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
-        
-        let deployer_pubkey = Pubkey::from_str("GH7koeBf99FBsdEnA8xLtWyLFgb44CgDGUXwLHnAATR").unwrap();
-        require_keys_eq!(
-            ctx.accounts.user.key(),
-            deployer_pubkey,
-            ErrorCode::Unauthorized
-        );
+
+        // Removed hardcoded deployer check allows any wallet to initialize
+        // The initializer becomes the admin automatically below
 
         global_account.admin = ctx.accounts.user.key();
         global_account.token_mint = ctx.accounts.token_mint.key();
@@ -39,6 +37,68 @@ pub mod pulsar_dao {
             ErrorCode::Unauthorized
         );
         global_account.system_enabled = !global_account.system_enabled;
+        Ok(())
+    }
+
+    pub fn admin_mint(ctx: Context<AdminMint>, amount: u64) -> Result<()> {
+        // Mint to target. Authority is Global Account PDA
+        
+        // Calculate amount with decimals (assuming input is "human readable" amount, or raw? 
+        // User request usually implies raw if not specified, but for consistency with request_tokens which does 3000 * 10^decimals...
+        // Let's look at TokenManager.js usages. It usually handles decimals or passes raw?
+        // TokenManager sends "mintAmount" (e.g. 100). If we want consistency, we should multiply by decimals here 
+        // OR the frontend handles it. 
+        // In request_tokens, we did: 3000 * 10u64.pow(decimals).
+        // Let's do the same here for ease of use from "human" numbers in the admin panel.
+        
+        let amount_with_decimals = amount.checked_mul(10u64.pow(ctx.accounts.token_mint.decimals as u32)).unwrap();
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::MintTo {
+                    mint: ctx.accounts.token_mint.to_account_info(),
+                    to: ctx.accounts.target_token_account.to_account_info(),
+                    authority: ctx.accounts.global_account.to_account_info(),
+                },
+                &[&[GLOBAL_ACCOUNT_SEED, &[ctx.bumps.global_account]]]
+            ),
+            amount_with_decimals,
+        )?;
+        Ok(())
+    }
+
+    pub fn request_tokens(ctx: Context<RequestTokens>) -> Result<()> {
+        let faucet_record = &mut ctx.accounts.faucet_record;
+        let clock = Clock::get()?;
+        let current_time = clock.unix_timestamp;
+        
+        // 24 hours in seconds = 86400
+        if faucet_record.last_request_time > 0 {
+            require!(
+                current_time >= faucet_record.last_request_time + 86400, 
+                ErrorCode::FaucetCooldown
+            );
+        }
+
+        // Mint 3000 Tokens
+        let amount = 3000 * 10u64.pow(ctx.accounts.token_mint.decimals as u32);
+        
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::MintTo {
+                    mint: ctx.accounts.token_mint.to_account_info(),
+                    to: ctx.accounts.user_token_account.to_account_info(),
+                    authority: ctx.accounts.global_account.to_account_info(),
+                },
+                &[&[GLOBAL_ACCOUNT_SEED, &[ctx.bumps.global_account]]]
+            ),
+            amount,
+        )?;
+
+        faucet_record.last_request_time = current_time;
+        
         Ok(())
     }
 
@@ -384,9 +444,68 @@ pub struct UnstakeTokens<'info> {
 }
 
 #[derive(Accounts)]
+pub struct RequestTokens<'info> {
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = 8 + 8, // discriminator + last_request_time
+        seeds = [FAUCET_SEED, user.key().as_ref()],
+        bump
+    )]
+    pub faucet_record: Account<'info, FaucetRecord>,
+
+    #[account(
+        mut,
+        seeds = [b"global_account"],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+
+    #[account(mut)]
+    pub token_mint: Account<'info, Mint>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = token_mint,
+        associated_token::authority = user,
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AdminMint<'info> {
+    #[account(
+        seeds = [b"global_account"], 
+        bump,
+        has_one = admin,
+        has_one = token_mint
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+
+    #[account(mut)]
+    pub token_mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub target_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
 pub struct VoteProposal<'info> {
     #[account(
-        seeds = [b"global_account_v3"],
+        seeds = [b"global_account"],
         bump
     )]
     pub global_account: Account<'info, GlobalAccount>,
@@ -478,6 +597,11 @@ pub struct VoterStakeRecord {
     pub multiplier: u64,
 }
 
+#[account]
+pub struct FaucetRecord {
+    pub last_request_time: i64,
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("Proposal is not active.")]
@@ -504,6 +628,8 @@ pub enum ErrorCode {
     InvalidTokenAccount,
     #[msg("Invalid lock duration.")]
     InvalidLockDuration,
+    #[msg("You must wait 24 hours between faucet requests.")]
+    FaucetCooldown,
 }
 
 #[event]

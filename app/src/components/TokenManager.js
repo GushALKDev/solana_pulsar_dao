@@ -8,9 +8,12 @@ import {
   createInitializeMintInstruction,
   MINT_SIZE,
   TOKEN_PROGRAM_ID,
-  getAccount
+  getAccount,
+  createSetAuthorityInstruction,
+  AuthorityType
 } from '@solana/spl-token';
 import { PublicKey, Keypair, SystemProgram, Transaction } from '@solana/web3.js';
+import { BN } from 'bn.js';
 import { program, globalAccountPDAAddress, programId, globalStateSeed } from '../config';
 import { Activity } from 'lucide-react';
 
@@ -117,8 +120,16 @@ const TokenManager = () => {
                 systemProgram: SystemProgram.programId,
             })
             .instruction();
+
+          // Transfer Mint Authority to PDA
+          const setAuthorityIx = createSetAuthorityInstruction(
+              mintPubkey,
+              publicKey, // current authority
+              AuthorityType.MintTokens,
+              globalAccountPDAAddress // new authority (PDA)
+          );
             
-          const transaction = new Transaction().add(createMintAccountIx, initMintIx, initDaoIx);
+          const transaction = new Transaction().add(createMintAccountIx, initMintIx, initDaoIx, setAuthorityIx);
           
           // Sign with wallet AND mint keypair
           const signature = await sendTransaction(transaction, connection, { signers: [mintKeypair] });
@@ -174,15 +185,24 @@ const TokenManager = () => {
           );
       }
       
-      // Mint tokens
-      transaction.add(
-          createMintToInstruction(
-              mintPubkey,
-              ata,
-              publicKey, // authority
-              mintAmount
-          )
-      );
+      // Mint using Admin Logic (via Program)
+      // Since we transferred authority to the PDA, we can no longer mint directly.
+      // We must ask the program to mint for us (if we are admin).
+      
+      const votingProgram = program({ publicKey });
+      
+      const mintTx = await votingProgram.methods
+        .adminMint(new BN(mintAmount))
+        .accounts({
+            globalAccount: globalAccountPDAAddress,
+            tokenMint: mintPubkey,
+            targetTokenAccount: ata,
+            admin: publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID
+        })
+        .transaction();
+
+      transaction.add(mintTx);
       
       const signature = await sendTransaction(transaction, connection);
       await connection.confirmTransaction(signature, 'confirmed');

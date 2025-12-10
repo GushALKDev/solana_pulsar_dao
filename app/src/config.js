@@ -13,12 +13,13 @@ export const connection = new Connection(devnet);
 export const idl = require('./idl/pulsar_dao.json');
 
 // Program ID for your Solana program
-export const programId = new PublicKey('DPvVAgTnp6DhWvCgE3ADKEjLArgJgM4ZE9SRj1Dg7KLY');
+export const programId = new PublicKey('3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM');
 
 // PDAs seeds
-export const globalStateSeed = 'global_account_v3';
+export const globalStateSeed = 'global_account';
 export const proposalSeed = 'proposal';
 export const voterSeed = 'voter';
+export const faucetSeed = 'faucet';
 
 // Helper to create the AnchorProvider instance
 const getProvider = (wallet) => {
@@ -43,7 +44,7 @@ export const program = (wallet) => {
     return new Program(idl, getProvider(wallet));
 };
 
-export const [globalAccountPDAAddress] = await PublicKey.findProgramAddress(
+export const [globalAccountPDAAddress] = PublicKey.findProgramAddressSync(
     [Buffer.from(globalStateSeed)], // Seed for global account
     programId // Use programId from config.js
 );

@@ -55,7 +55,7 @@ const CreateProposal = () => {
 
       const proposalsCounter = Number(globalAccount.proposalCount.toString());
 
-      const [proposalPDAAddress] = await PublicKey.findProgramAddress(
+      const [proposalPDAAddress] = PublicKey.findProgramAddressSync(
         [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(proposalsCounter + 1))],
         programId
       );

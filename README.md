@@ -3,7 +3,7 @@
 ![Pulsar DAO Banner](img/pulsar_dao_banner.png)
 
 > **Next-Generation Hybrid Governance on Solana.**
-> combining Liquid Democracy with Time-Locked Staking incentives.
+> Combining Liquid Democracy with Time-Locked Staking incentives.
 
 ![Solana](https://img.shields.io/badge/Solana-Devnet-linear?style=for-the-badge&logo=solana&logoColor=white)
 ![Anchor](https://img.shields.io/badge/Anchor-Framework-blue?style=for-the-badge&logo=rust&logoColor=white)
@@ -22,16 +22,25 @@ The system features a futuristic, responsive UI connected to a robust Solana sma
 
 ## ✨ Key Features
 
-### 🔮 Hybrid Voting Power & Proposal Limits
-Your voting influence is dynamically calculated based on two factors:
-1.  **Liquid Balance:** Tokens held in your wallet provide baseline power.
-2.  **Staked Balance:** Tokens locked in the DAO Vault provide boosted power.
+### 🔮 Hybrid & Quadratic Voting
+Pulsar DAO combines **Liquid Democracy** with **Quadratic Voting** to create a fair and resilient governance model.
 
-**Formula:**
+**1. Quadratic Voting (The "Fairness" Engine)**
+To prevent "whale dominance" (where 1 wealthy user outvotes everyone), we calculate voting power using the **Square Root** of token holdings.
+- **Concept:** Voting power increases quadratically slower than token holding.
+- **The Math:** `Voting Power = √Tokens`
+- **Example:**
+    - Holder A has **100 Tokens** → Gets **10 Votes**.
+    - Holder B has **10,000 Tokens** → Gets **100 Votes**.
+- **Impact:** To have **10x** the influence, a user needs **100x** the tokens. This balances the playing field between large stakeholders and the broader community.
 
-`Voting Power = √Liquid Tokens + (√Staked Tokens × Time Multiplier)`
+**2. Hybrid Strategy**
+Your total influence is a dynamic sum of two sources:
+- **Liquid Balance:** Tokens held in your wallet (Example: 100 tokens = 10 power).
+- **Staked Balance:** Tokens locked in the DAO Vault, which receive a **Time Multiplier** bonus.
 
-> **Note:** Proposals have a strictly enforced **Deadline**. Once the deadline timestamp is passed (checked on-chain via `Clock::get()`), no further votes can be cast or withdrawn.
+**Master Formula:**
+`Voting Power = √Liquid_Tokens + (√Staked_Tokens × Time_Multiplier)`
 
 ### 🔐 Global Staking
 - **Unified Stake Record:** A single staking account per user simplifies management.
@@ -42,13 +51,6 @@ Your voting influence is dynamically calculated based on two factors:
     - **180 Seconds:** 4x Multiplier
     - **360 Seconds:** 5x Max Multiplier
 - **Security:** Strict on-chain validation prevents unstaking before lock expiry.
-
-### 📊 Analytics Dashboard
-A real-time analytics hub provides deep insights into DAO activity:
-- **KPIs:** Track total votes cast, active proposals, and proposal completion rates.
-- **Engagement Charts:** Visual bar charts showing YES/NO vote distribution per proposal.
-- **Sentiment Analysis:** Global pie chart aggregating historical voting trends.
-- **Top Proposals:** Leaderboard of the most engaged proposals.
 
 ### ⏳ Time-Limited Proposals
 Every proposal is created with a specific, immutable deadline to ensure timely governance decisions.
@@ -61,6 +63,13 @@ Every proposal is created with a specific, immutable deadline to ensure timely g
 
 ### 🛡️ Circuit Breaker (Safety Module)
 An admin-controlled "Emergency Stop" system. If a critical vulnerability is detected, the **Circuit Breaker** can be tripped to instantly pause all voting and withdrawal actions, protecting DAO assets.
+
+### 📊 Analytics Dashboard
+A real-time analytics hub provides deep insights into DAO activity:
+- **KPIs:** Track total votes cast, active proposals, and proposal completion rates.
+- **Engagement Charts:** Visual bar charts showing YES/NO vote distribution per proposal.
+- **Sentiment Analysis:** Global pie chart aggregating historical voting trends.
+- **Top Proposals:** Leaderboard of the most engaged proposals.
 
 ---
 

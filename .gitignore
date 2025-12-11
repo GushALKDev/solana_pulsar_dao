@@ -5,4 +5,5 @@ target
 node_modules
 test-ledger
 .yarn
-Hackathon_Improvements.md
+.vercel
+.env*.local

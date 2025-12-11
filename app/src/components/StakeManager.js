@@ -92,9 +92,8 @@ const StakeManager = ({ tokenMintAddress }) => {
     
     // ... helpers ...
     const getMultiplier = (days) => {
-        if (days < 30) return 1;
-        const raw = 1 + Math.floor(days / 30);
-        return Math.min(raw, 5); // Cap to 5x
+        const multiplierMap = { 30: 2, 90: 3, 180: 4, 360: 5 };
+        return multiplierMap[days] || 1;
     };
 
     const getPreviewDetails = () => {

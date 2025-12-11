@@ -10,6 +10,8 @@
 ![React](https://img.shields.io/badge/Frontend-React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
+**🌐 [Live Demo: pulsar-dao.vercel.app](https://pulsar-dao.vercel.app/)**
+
 ---
 
 ## 🚀 Overview

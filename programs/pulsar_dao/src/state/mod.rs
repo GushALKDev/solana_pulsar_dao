@@ -16,7 +16,8 @@ pub struct GlobalAccount {
 pub struct ProposalAccount {
     pub number: u64,
     pub author: Pubkey,
-    pub question: String,
+    pub title: String,       // NEW: Short title for the proposal
+    pub description: String, // Detailed description/body of the proposal
     pub yes: u64,
     pub no: u64,
     pub deadline: i64,

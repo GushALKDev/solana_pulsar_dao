@@ -1,5 +1,5 @@
 {
-  "address": "3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM",
+  "address": "EiGL8MYPDdcqfJA3vYq798J1G3f77YzwyEWreDqhEFWn",
   "metadata": {
     "name": "pulsar_dao",
     "version": "0.1.0",
@@ -318,7 +318,11 @@
       ],
       "args": [
         {
-          "name": "question",
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "description",
           "type": "string"
         },
         {
@@ -405,7 +409,11 @@
       ],
       "args": [
         {
-          "name": "question",
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "description",
           "type": "string"
         },
         {
@@ -2546,7 +2554,11 @@
             "type": "pubkey"
           },
           {
-            "name": "question",
+            "name": "title",
+            "type": "string"
+          },
+          {
+            "name": "description",
             "type": "string"
           },
           {

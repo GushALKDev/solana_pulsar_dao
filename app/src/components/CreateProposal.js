@@ -10,7 +10,8 @@ import { Loader2, CheckCircle, Coins, ToggleLeft, ToggleRight } from 'lucide-rea
 const CreateProposal = () => {
     // ... (state vars) 
   const { publicKey, sendTransaction } = useWallet();
-  const [proposalQuestion, setProposalQuestion] = useState('');
+  const [proposalTitle, setProposalTitle] = useState('');
+  const [proposalDescription, setProposalDescription] = useState('');
   const [duration, setDuration] = useState(10);
   const [loading, setLoading] = useState(false);
 
@@ -65,8 +66,12 @@ const CreateProposal = () => {
         setErrorMessage('Please connect your wallet first.');
         return;
     }
-    if (!proposalQuestion.trim()) {
-      setErrorMessage('Please enter a valid question.');
+    if (!proposalTitle.trim()) {
+      setErrorMessage('Please enter a title for your proposal.');
+      return;
+    }
+    if (!proposalDescription.trim()) {
+      setErrorMessage('Please enter a description for your proposal.');
       return;
     }
 
@@ -134,7 +139,8 @@ const CreateProposal = () => {
 
         transaction = await votingProgram.methods
           .createTreasuryProposal(
-            proposalQuestion, 
+            proposalTitle,
+            proposalDescription, 
             deadlineTimestamp, 
             amountInLamports, 
             destination,
@@ -155,7 +161,7 @@ const CreateProposal = () => {
       } else {
         // Standard Proposal - no treasury
         transaction = await votingProgram.methods
-          .createProposal(proposalQuestion, deadlineTimestamp)
+          .createProposal(proposalTitle, proposalDescription, deadlineTimestamp)
           .accounts({
             globalAccount: globalAccountPDAAddress,
             proposalAccount: proposalPDAAddress,
@@ -219,17 +225,34 @@ const CreateProposal = () => {
       </h2>
 
       <div className="space-y-6">
-        {/* Proposal Question Input */}
+        {/* Proposal Title Input */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Proposal Question
+            Proposal Title
           </label>
           <input
             type="text"
-            value={proposalQuestion}
-            onChange={(e) => setProposalQuestion(e.target.value)}
-            placeholder="What should the DAO vote on?"
+            value={proposalTitle}
+            onChange={(e) => setProposalTitle(e.target.value)}
+            placeholder="Short title for your proposal"
+            maxLength={100}
             className="w-full bg-[#1a1c2e] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#14F195] transition-colors"
+            disabled={loading}
+          />
+        </div>
+
+        {/* Proposal Description Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Description
+          </label>
+          <textarea
+            value={proposalDescription}
+            onChange={(e) => setProposalDescription(e.target.value)}
+            placeholder="Provide more details about your proposal..."
+            maxLength={500}
+            rows={4}
+            className="w-full bg-[#1a1c2e] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#14F195] transition-colors resize-none"
             disabled={loading}
           />
         </div>

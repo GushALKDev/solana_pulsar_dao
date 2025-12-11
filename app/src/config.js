@@ -13,7 +13,7 @@ export const connection = new Connection(devnet);
 export const idl = require('./idl/pulsar_dao.json');
 
 // Program ID for your Solana program
-export const programId = new PublicKey('3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM');
+export const programId = new PublicKey("EiGL8MYPDdcqfJA3vYq798J1G3f77YzwyEWreDqhEFWn");
 
 // PDAs seeds
 export const globalStateSeed = 'global_account';

@@ -88,9 +88,9 @@ pub struct CreateProposal<'info> {
     #[account(
         init,
         payer = author,
-        // Space: discriminator(8) + number(8) + author(32) + question(4+200) + yes(8) + no(8) + deadline(8) + is_active(1) 
-        // + proposal_type(1) + transfer_amount(8) + transfer_destination(32) + timelock_seconds(8) + executed(1) = 327 bytes
-        space = 8 + 8 + 32 + 204 + 8 + 8 + 8 + 1 + 1 + 8 + 32 + 8 + 1,
+        // Space: discriminator(8) + number(8) + author(32) + title(4+100) + question(4+500) + yes(8) + no(8) + deadline(8) + is_active(1) 
+        // + proposal_type(1) + transfer_amount(8) + transfer_destination(32) + timelock_seconds(8) + executed(1) = 731 bytes
+        space = 8 + 8 + 32 + 104 + 504 + 8 + 8 + 8 + 1 + 1 + 8 + 32 + 8 + 1,
         seeds = [PROPOSAL_SEED, (global_account.proposal_count + 1).to_le_bytes().as_ref()],
         bump
     )]
@@ -522,9 +522,9 @@ pub struct CreateTreasuryProposal<'info> {
     #[account(
         init,
         payer = author,
-        // Space: discriminator(8) + number(8) + author(32) + question(4+200) + yes(8) + no(8) + deadline(8) + is_active(1) 
-        // + proposal_type(1) + transfer_amount(8) + transfer_destination(32) + timelock_seconds(8) + executed(1) = 327 bytes
-        space = 8 + 8 + 32 + 204 + 8 + 8 + 8 + 1 + 1 + 8 + 32 + 8 + 1,
+        // Space: discriminator(8) + number(8) + author(32) + title(4+100) + question(4+500) + yes(8) + no(8) + deadline(8) + is_active(1) 
+        // + proposal_type(1) + transfer_amount(8) + transfer_destination(32) + timelock_seconds(8) + executed(1) = 731 bytes
+        space = 8 + 8 + 32 + 104 + 504 + 8 + 8 + 8 + 1 + 1 + 8 + 32 + 8 + 1,
         seeds = [PROPOSAL_SEED, (global_account.proposal_count + 1).to_le_bytes().as_ref()],
         bump
     )]

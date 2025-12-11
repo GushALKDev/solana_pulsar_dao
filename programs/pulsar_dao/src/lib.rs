@@ -18,7 +18,7 @@ pub use errors::ErrorCode;
 pub use state::*;
 pub use contexts::*;
 
-declare_id!("3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM");
+declare_id!("EiGL8MYPDdcqfJA3vYq798J1G3f77YzwyEWreDqhEFWn");
 
 ////////////////////////////////////////////////////////////////
 //                   PROGRAM INSTRUCTIONS
@@ -110,7 +110,8 @@ pub mod pulsar_dao {
 
     pub fn create_proposal(
         ctx: Context<CreateProposal>,
-        question: String,
+        title: String,
+        description: String,
         deadline: i64,
     ) -> Result<()> {
         let global_account = &mut ctx.accounts.global_account;
@@ -122,7 +123,8 @@ pub mod pulsar_dao {
 
         proposal_account.number = global_account.proposal_count;
         proposal_account.author = ctx.accounts.author.key();
-        proposal_account.question = question;
+        proposal_account.title = title;
+        proposal_account.description = description;
         proposal_account.yes = 0;
         proposal_account.no = 0;
         proposal_account.deadline = deadline;
@@ -529,7 +531,8 @@ pub mod pulsar_dao {
     /// Create a treasury proposal with tokens deposited to escrow
     pub fn create_treasury_proposal(
         ctx: Context<CreateTreasuryProposal>,
-        question: String,
+        title: String,
+        description: String,
         deadline: i64,
         transfer_amount: u64,
         transfer_destination: Pubkey,
@@ -557,7 +560,8 @@ pub mod pulsar_dao {
         let proposal_account = &mut ctx.accounts.proposal_account;
         proposal_account.number = global_account.proposal_count;
         proposal_account.author = ctx.accounts.author.key();
-        proposal_account.question = question;
+        proposal_account.title = title;
+        proposal_account.description = description;
         proposal_account.yes = 0;
         proposal_account.no = 0;
         proposal_account.deadline = deadline;

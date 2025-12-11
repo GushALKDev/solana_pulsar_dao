@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-pulsar_dao = "3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM"
+pulsar_dao = "EiGL8MYPDdcqfJA3vYq798J1G3f77YzwyEWreDqhEFWn"
 
 [programs.localnet]
-pulsar_dao = "3L3AHoLNohPcM9oPWKpYxGeCRYnfKKuh6zzEpVKXfYJM"
+pulsar_dao = "EiGL8MYPDdcqfJA3vYq798J1G3f77YzwyEWreDqhEFWn"
 
 [registry]
 url = "https://api.apr.dev"

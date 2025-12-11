@@ -217,7 +217,8 @@ const Home = () => {
           if (proposalAccount) {
             foundProposals.push({
               number: i,
-              question: proposalAccount.question.toString(),
+              title: proposalAccount.title?.toString() || proposalAccount.description.toString(),
+              description: proposalAccount.description.toString(),
               totalVotes: Number(proposalAccount.yes.toString()) + Number(proposalAccount.no.toString()),
               deadline: Number(proposalAccount.deadline.toString()),
               deadlineRaw: proposalAccount.deadline.toString(), // Debug
@@ -408,9 +409,12 @@ const Home = () => {
                             </span>
                         </div>
 
-                        <h4 className="text-lg font-display font-bold text-white mb-2 line-clamp-3">
-                            {proposal.question}
+                        <h4 className="text-lg font-display font-bold text-white mb-1 line-clamp-2">
+                            {proposal.title}
                         </h4>
+                        <p className="text-sm text-pulsar-muted line-clamp-2 mb-4">
+                            {proposal.description}
+                        </p>
                         
                         <div className="mb-6 flex-1">
                              <div className="text-xs text-pulsar-muted flex justify-between mb-1">

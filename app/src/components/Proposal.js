@@ -163,7 +163,8 @@ const Proposal = () => {
                 
                 setProposal({
                     number: proposalNumber,
-                    question: proposalAccount.question.toString(),
+                    title: proposalAccount.title?.toString() || proposalAccount.description.toString(),
+                    description: proposalAccount.description.toString(),
                     yes: Number(proposalAccount.yes.toString()),
                     no: Number(proposalAccount.no.toString()),
                     deadline: Number(proposalAccount.deadline.toString()),
@@ -710,7 +711,8 @@ const Proposal = () => {
                <div className="flex justify-between items-start mb-8 relative z-10">
                    <div>
                        <span className="text-pulsar-primary/80 font-mono text-xs tracking-widest mb-2 block uppercase">Proposal #{proposal.number}</span>
-                       <h1 className="text-4xl font-display font-medium text-white leading-tight max-w-2xl">{proposal.question}</h1>
+                       <h1 className="text-4xl font-display font-medium text-white leading-tight max-w-2xl">{proposal.title}</h1>
+                       <p className="text-pulsar-muted mt-3 max-w-2xl">{proposal.description}</p>
                    </div>
                    <div className={`px-4 py-1.5 rounded-full border text-xs font-bold tracking-wider flex items-center gap-2 ${isActive ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_10px_rgba(74,222,128,0.2)]' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
                        <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`}></div>

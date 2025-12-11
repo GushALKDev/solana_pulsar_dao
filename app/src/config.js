@@ -22,6 +22,7 @@ export const voterSeed = 'voter';
 export const faucetSeed = 'faucet';
 export const delegateProfileSeed = 'delegate_profile';
 export const delegationRecordSeed = 'delegation_record';
+export const proposalEscrowSeed = 'proposal_escrow';
 
 // Helper to create the AnchorProvider instance
 const getProvider = (wallet) => {

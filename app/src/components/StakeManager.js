@@ -312,11 +312,13 @@ const StakeManager = ({ tokenMintAddress }) => {
                         </div>
                         <div className="relative">
                             <input 
-                                type="number" 
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*" 
                                 value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
+                                onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
                                 className="w-full bg-black/20 border border-white/10 rounded-xl p-4 text-white placeholder-gray-600 focus:outline-none focus:border-pulsar-primary transition-colors"
-                                placeholder="0.00"
+                                placeholder="0"
                             />
                             <button 
                                 onClick={() => setAmount(userBalance)}

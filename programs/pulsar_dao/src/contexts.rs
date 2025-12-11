@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////
-//          INSTRUCTION CONTEXT STRUCTS (Account Validation)
+//               INSTRUCTION CONTEXT STRUCTS
+//                   (Account Validation)
 ////////////////////////////////////////////////////////////////
 
 use anchor_lang::prelude::*;
@@ -7,6 +8,7 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use anchor_spl::associated_token::AssociatedToken;
 
 use crate::state::*;
+use crate::errors::ErrorCode;
 
 pub const GLOBAL_ACCOUNT_SEED: &[u8] = b"global_account";
 pub const PROPOSAL_SEED: &[u8] = b"proposal";
@@ -83,7 +85,9 @@ pub struct CreateProposal<'info> {
     #[account(
         init,
         payer = author,
-        space = 8 + 8 + 32 + 200 + 8 + 8 + 8 + 1,
+        // Space: discriminator(8) + number(8) + author(32) + question(4+200) + yes(8) + no(8) + deadline(8) + is_active(1) 
+        // + proposal_type(1) + transfer_amount(8) + transfer_destination(32) + timelock_seconds(8) + executed(1) = 327 bytes
+        space = 8 + 8 + 32 + 204 + 8 + 8 + 8 + 1 + 1 + 8 + 32 + 8 + 1,
         seeds = [PROPOSAL_SEED, (global_account.proposal_count + 1).to_le_bytes().as_ref()],
         bump
     )]
@@ -478,3 +482,139 @@ pub struct WithdrawAsProxy<'info> {
     #[account(mut)]
     pub proxy_authority: Signer<'info>,
 }
+
+////////////////////////////////////////////////////////////////
+//                TREASURY PROPOSAL CONTEXTS
+////////////////////////////////////////////////////////////////
+
+pub const PROPOSAL_ESCROW_SEED: &[u8] = b"proposal_escrow";
+
+#[derive(Accounts)]
+pub struct CreateTreasuryProposal<'info> {
+    #[account(
+        mut,
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+    
+    #[account(
+        init,
+        payer = author,
+        // Space: discriminator(8) + number(8) + author(32) + question(4+200) + yes(8) + no(8) + deadline(8) + is_active(1) 
+        // + proposal_type(1) + transfer_amount(8) + transfer_destination(32) + timelock_seconds(8) + executed(1) = 327 bytes
+        space = 8 + 8 + 32 + 204 + 8 + 8 + 8 + 1 + 1 + 8 + 32 + 8 + 1,
+        seeds = [PROPOSAL_SEED, (global_account.proposal_count + 1).to_le_bytes().as_ref()],
+        bump
+    )]
+    pub proposal_account: Account<'info, ProposalAccount>,
+    
+    #[account(
+        init,
+        payer = author,
+        seeds = [PROPOSAL_ESCROW_SEED, (global_account.proposal_count + 1).to_le_bytes().as_ref()],
+        bump,
+        token::mint = token_mint,
+        token::authority = proposal_escrow,
+    )]
+    pub proposal_escrow: Account<'info, TokenAccount>,
+    
+    #[account(
+        constraint = token_mint.key() == global_account.token_mint
+    )]
+    pub token_mint: Account<'info, Mint>,
+    
+    #[account(
+        mut,
+        constraint = author_token_account.mint == token_mint.key(),
+        constraint = author_token_account.owner == author.key()
+    )]
+    pub author_token_account: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub author: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+#[instruction(proposal_number: u64)]
+pub struct ExecuteProposal<'info> {
+    #[account(
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+    
+    #[account(
+        mut,
+        seeds = [PROPOSAL_SEED, proposal_number.to_le_bytes().as_ref()],
+        bump,
+        constraint = proposal_account.proposal_type == 1 @ ErrorCode::NotTreasuryProposal,
+    )]
+    pub proposal_account: Account<'info, ProposalAccount>,
+    
+    #[account(
+        mut,
+        seeds = [PROPOSAL_ESCROW_SEED, proposal_number.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub proposal_escrow: Account<'info, TokenAccount>,
+    
+    /// CHECK: Destination token account - will be validated in instruction
+    #[account(mut)]
+    pub destination_token_account: Account<'info, TokenAccount>,
+    
+    #[account(
+        constraint = token_mint.key() == global_account.token_mint
+    )]
+    pub token_mint: Account<'info, Mint>,
+    
+    #[account(mut)]
+    pub executor: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+#[instruction(proposal_number: u64)]
+pub struct ReclaimProposalFunds<'info> {
+    #[account(
+        seeds = [GLOBAL_ACCOUNT_SEED],
+        bump,
+    )]
+    pub global_account: Account<'info, GlobalAccount>,
+    
+    #[account(
+        mut,
+        seeds = [PROPOSAL_SEED, proposal_number.to_le_bytes().as_ref()],
+        bump,
+        constraint = proposal_account.proposal_type == 1 @ ErrorCode::NotTreasuryProposal,
+        constraint = proposal_account.author == author.key() @ ErrorCode::Unauthorized,
+    )]
+    pub proposal_account: Account<'info, ProposalAccount>,
+    
+    #[account(
+        mut,
+        seeds = [PROPOSAL_ESCROW_SEED, proposal_number.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub proposal_escrow: Account<'info, TokenAccount>,
+    
+    #[account(
+        mut,
+        constraint = author_token_account.mint == global_account.token_mint,
+        constraint = author_token_account.owner == author.key()
+    )]
+    pub author_token_account: Account<'info, TokenAccount>,
+    
+    #[account(
+        constraint = token_mint.key() == global_account.token_mint
+    )]
+    pub token_mint: Account<'info, Mint>,
+    
+    #[account(mut)]
+    pub author: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+}
+

@@ -24,7 +24,7 @@ const TokenManager = () => {
   const { connection } = useConnection();
   const [tokenMint, setTokenMint] = useState('');
   const [tokenBalance, setTokenBalance] = useState(0);
-  const [mintAmount, setMintAmount] = useState(100);
+  const [mintAmount, setMintAmount] = useState('100');
   const [recipientAddress, setRecipientAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -426,6 +426,7 @@ const TokenManager = () => {
   }
 
   return (
+    <div className="max-w-7xl mx-auto p-8">
     <div className="bg-[#0f1117] rounded-2xl p-8 border border-white/10 backdrop-blur-sm">
       <h2 className="text-3xl font-bold text-white mb-6 bg-gradient-to-r from-[#14F195] to-[#9945FF] bg-clip-text text-transparent">
         DAO Admin
@@ -520,11 +521,13 @@ const TokenManager = () => {
                        Amount to Mint
                      </label>
                      <input
-                       type="number"
+                       type="text"
+                       inputMode="numeric"
+                       pattern="[0-9]*"
                        value={mintAmount}
-                       onChange={(e) => setMintAmount(Number(e.target.value))}
+                       onChange={(e) => setMintAmount(e.target.value.replace(/[^0-9]/g, ''))}
                        className="w-full bg-[#1a1c2e] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#14F195] transition-colors"
-                       min="1"
+                       placeholder="100"
                        disabled={loading}
                      />
                    </div>
@@ -654,6 +657,7 @@ const TokenManager = () => {
              )}
           </div>
       )}
+    </div>
     </div>
   );
 };

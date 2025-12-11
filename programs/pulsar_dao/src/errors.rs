@@ -6,6 +6,7 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum ErrorCode {
+    // Proposal & Voting Errors
     #[msg("Proposal is not active.")]
     ProposalNotActive,
     #[msg("Proposal has expired.")]
@@ -18,6 +19,8 @@ pub enum ErrorCode {
     InvalidVoteOption,
     #[msg("Unauthorized access.")]
     Unauthorized,
+
+    // Staking Errors
     #[msg("Tokens are still locked.")]
     TokensLocked,
     #[msg("Lock duration cannot be less than previous stake.")]
@@ -30,8 +33,12 @@ pub enum ErrorCode {
     InvalidTokenAccount,
     #[msg("Invalid lock duration.")]
     InvalidLockDuration,
+
+    // Faucet Errors
     #[msg("You must wait 24 hours between faucet requests.")]
     FaucetCooldown,
+
+    // Delegation Errors
     #[msg("Delegate is not authorized or inactive.")]
     InvalidDelegate,
     #[msg("User has already voted directly. Proxy cannot override.")]
@@ -46,4 +53,20 @@ pub enum ErrorCode {
     DelegatorsCannotVote,
     #[msg("Vote was cast by proxy and is locked (cannot be withdrawn or changed).")]
     ProxyVoteLocked,
+
+    // Treasury Proposal Errors
+    #[msg("Proposal voting has not ended yet.")]
+    ProposalNotEnded,
+    #[msg("Timelock period has not passed yet.")]
+    TimelockNotPassed,
+    #[msg("Proposal was not approved (YES > NO required).")]
+    ProposalNotPassed,
+    #[msg("Proposal passed, cannot reclaim funds.")]
+    ProposalPassed,
+    #[msg("Proposal has already been executed.")]
+    AlreadyExecuted,
+    #[msg("Transfer amount must be greater than 0.")]
+    InvalidAmount,
+    #[msg("Target account is not a treasury proposal.")]
+    NotTreasuryProposal,
 }

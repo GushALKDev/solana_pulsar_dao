@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress } from '@solana/spl-token';
-import { CheckCircle, XCircle, ArrowLeft, Clock, Vote, AlertTriangle, Loader2, Users, Lock } from 'lucide-react';
-import { program, programId, proposalSeed, globalStateSeed, delegationRecordSeed, delegateProfileSeed } from '../config';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { CheckCircle, XCircle, ArrowLeft, Clock, Vote, AlertTriangle, Loader2, Users, Lock, Coins, ExternalLink, Play, Undo2 } from 'lucide-react';
+import { program, programId, proposalSeed, globalStateSeed, delegationRecordSeed, delegateProfileSeed, proposalEscrowSeed } from '../config';
+import { BN } from 'bn.js';
 
 const STAKE_RECORD_SEED = "stake_record";
 
@@ -30,6 +31,13 @@ const Proposal = () => {
     const [delegatedTo, setDelegatedTo] = useState(null);
     const [systemEnabled, setSystemEnabled] = useState(true);
     const [userVoterInfo, setUserVoterInfo] = useState(null); // { voted: bool, vote: bool, votedByProxy: bool }
+    
+    // Treasury proposal state
+    const [treasuryInfo, setTreasuryInfo] = useState(null);
+    const [executingProposal, setExecutingProposal] = useState(false);
+    const [escrowEmpty, setEscrowEmpty] = useState(false); // True if escrow has no tokens (transfer completed)
+    const [escrowBalance, setEscrowBalance] = useState(0); // Current escrow balance
+    const [timelockRemaining, setTimelockRemaining] = useState(null); // Seconds remaining for timelock
 
     // Calculate User Voting Power
     useEffect(() => {
@@ -160,8 +168,38 @@ const Proposal = () => {
                     no: Number(proposalAccount.no.toString()),
                     deadline: Number(proposalAccount.deadline.toString()),
                     pda: proposalPDAAddress.toBase58(),
-                    isActive: true 
+                    isActive: true,
+                    author: proposalAccount.author.toBase58(),
                 });
+
+                // Check if treasury proposal
+                const proposalType = proposalAccount.proposalType;
+                if (proposalType === 1) {
+                    setTreasuryInfo({
+                        transferAmount: Number(proposalAccount.transferAmount.toString()),
+                        transferDestination: proposalAccount.transferDestination.toBase58(),
+                        timelockSeconds: Number(proposalAccount.timelockSeconds.toString()),
+                        executed: proposalAccount.executed,
+                    });
+                    
+                    // Check escrow balance to verify transfer status
+                    try {
+                        const [escrowPDA] = PublicKey.findProgramAddressSync(
+                            [Buffer.from(proposalEscrowSeed), Buffer.from(toLittleEndian8Bytes(proposalNumber))],
+                            programId
+                        );
+                        const escrowBalanceResult = await connection.getTokenAccountBalance(escrowPDA);
+                        const balance = Number(escrowBalanceResult.value.amount);
+                        setEscrowBalance(balance);
+                        setEscrowEmpty(balance === 0);
+                    } catch (e) {
+                        // Escrow account might not exist yet or was closed
+                        setEscrowBalance(0);
+                        setEscrowEmpty(true);
+                    }
+                } else {
+                    setTreasuryInfo(null);
+                }
 
                 // Fetch User Vote Status
                 if (publicKey) {
@@ -486,6 +524,135 @@ const Proposal = () => {
         }
     };
 
+    // Timelock Countdown Timer
+    useEffect(() => {
+        if (!proposal || !treasuryInfo || treasuryInfo.executed) {
+            setTimelockRemaining(null);
+            return;
+        }
+        
+        const calculateRemaining = () => {
+            const now = Math.floor(Date.now() / 1000);
+            const executionTime = proposal.deadline + treasuryInfo.timelockSeconds;
+            const remaining = executionTime - now;
+            
+            if (remaining <= 0) {
+                setTimelockRemaining(0);
+            } else {
+                setTimelockRemaining(remaining);
+            }
+        };
+        
+        calculateRemaining();
+        const interval = setInterval(calculateRemaining, 1000);
+        return () => clearInterval(interval);
+    }, [proposal, treasuryInfo]);
+
+    // Treasury Execution Handlers
+    const handleExecuteProposal = async () => {
+        if (!publicKey || !tokenMint || !treasuryInfo) return;
+        
+        setExecutingProposal(true);
+        try {
+            const votingProgram = program({ publicKey, sendTransaction });
+            const proposalNumber = proposal.number;
+            
+            const [proposalPDAAddress] = PublicKey.findProgramAddressSync(
+                [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(proposalNumber))],
+                programId
+            );
+            
+            const [proposalEscrowPDA] = PublicKey.findProgramAddressSync(
+                [Buffer.from(proposalEscrowSeed), Buffer.from(toLittleEndian8Bytes(proposalNumber))],
+                programId
+            );
+            
+            const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
+            
+            // Get destination ATA
+            const destinationPubkey = new PublicKey(treasuryInfo.transferDestination);
+            const destinationATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), destinationPubkey);
+            
+            const transaction = await votingProgram.methods
+                .executeProposal(new BN(proposalNumber))
+                .accounts({
+                    globalAccount: globalAccountPDA,
+                    proposalAccount: proposalPDAAddress,
+                    proposalEscrow: proposalEscrowPDA,
+                    destinationTokenAccount: destinationATA,
+                    tokenMint: new PublicKey(tokenMint),
+                    executor: publicKey,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .transaction();
+            
+            const signature = await sendTransaction(transaction, connection);
+            await connection.confirmTransaction(signature, 'finalized');
+            
+            setExecutingProposal(false);
+            // Reload to refresh state
+            window.location.reload();
+            
+        } catch (e) {
+            console.error("Execute Error:", e);
+            setExecutingProposal(false);
+            alert("Failed to execute proposal: " + e.message);
+        }
+    };
+    
+    const handleReclaimFunds = async () => {
+        if (!publicKey || !tokenMint || !treasuryInfo) return;
+        if (proposal.author !== publicKey.toBase58()) {
+            alert("Only the proposal author can reclaim funds.");
+            return;
+        }
+        
+        setExecutingProposal(true);
+        try {
+            const votingProgram = program({ publicKey, sendTransaction });
+            const proposalNumber = proposal.number;
+            
+            const [proposalPDAAddress] = PublicKey.findProgramAddressSync(
+                [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(proposalNumber))],
+                programId
+            );
+            
+            const [proposalEscrowPDA] = PublicKey.findProgramAddressSync(
+                [Buffer.from(proposalEscrowSeed), Buffer.from(toLittleEndian8Bytes(proposalNumber))],
+                programId
+            );
+            
+            const [globalAccountPDA] = PublicKey.findProgramAddressSync([Buffer.from(globalStateSeed)], programId);
+            
+            const authorATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), publicKey);
+            
+            const transaction = await votingProgram.methods
+                .reclaimProposalFunds(new BN(proposalNumber))
+                .accounts({
+                    globalAccount: globalAccountPDA,
+                    proposalAccount: proposalPDAAddress,
+                    proposalEscrow: proposalEscrowPDA,
+                    authorTokenAccount: authorATA,
+                    tokenMint: new PublicKey(tokenMint),
+                    author: publicKey,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .transaction();
+            
+            const signature = await sendTransaction(transaction, connection);
+            await connection.confirmTransaction(signature, 'finalized');
+            
+            setExecutingProposal(false);
+            // Reload to refresh state
+            window.location.reload();
+            
+        } catch (e) {
+            console.error("Reclaim Error:", e);
+            setExecutingProposal(false);
+            alert("Failed to reclaim funds: " + e.message);
+        }
+    };
+
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center">
             <Loader2 className="w-12 h-12 text-[#14F195] animate-spin" />
@@ -581,6 +748,102 @@ const Proposal = () => {
                          </div>
                     </div>
                </div>
+
+               {/* Treasury Info Section */}
+               {treasuryInfo && (
+                   <div className="mb-8 p-6 bg-gradient-to-br from-[#14F195]/10 to-[#9945FF]/10 rounded-xl border border-[#14F195]/20 relative z-10">
+                       <div className="flex items-center gap-3 mb-4">
+                           <Coins className="w-6 h-6 text-[#14F195]" />
+                           <h3 className="text-lg font-bold text-white">Treasury Transfer</h3>
+                           {treasuryInfo.executed && (
+                               <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-full">
+                                   EXECUTED
+                               </span>
+                           )}
+                       </div>
+                       
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                           <div>
+                               <span className="text-gray-400 text-xs uppercase">Transfer Amount</span>
+                               <div className="text-2xl font-bold text-[#14F195]">
+                                   {treasuryInfo.transferAmount.toLocaleString()} $PULSAR
+                               </div>
+                           </div>
+                           <div>
+                               <span className="text-gray-400 text-xs uppercase">Destination</span>
+                               <div className="text-sm font-mono text-white break-all">
+                                   {treasuryInfo.transferDestination}
+                               </div>
+                           </div>
+                       </div>
+                       
+                       {treasuryInfo.timelockSeconds > 0 && (
+                           <div className="text-xs text-gray-400 mb-4">
+                               Timelock: {treasuryInfo.timelockSeconds} seconds after voting ends
+                           </div>
+                       )}
+                       
+                       {/* Execution Buttons */}
+                       {!isActive && !treasuryInfo.executed && !escrowEmpty && (
+                           <div className="flex flex-col gap-4 mt-4">
+                               {/* Timelock Countdown */}
+                               {timelockRemaining !== null && timelockRemaining > 0 && (
+                                   <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-center gap-3">
+                                       <Clock className="w-5 h-5 text-yellow-400" />
+                                       <div>
+                                           <div className="text-yellow-400 font-bold text-sm">Timelock Active</div>
+                                           <div className="text-white font-mono text-lg">
+                                               {Math.floor(timelockRemaining / 60)}m {timelockRemaining % 60}s remaining
+                                           </div>
+                                       </div>
+                                   </div>
+                               )}
+                               
+                               {/* Execute/Reclaim Buttons - only show when timelock passed */}
+                               {(timelockRemaining === 0 || timelockRemaining === null) && (
+                                   <>
+                                       {proposal.yes > proposal.no ? (
+                                           <button
+                                               onClick={handleExecuteProposal}
+                                               disabled={executingProposal || !publicKey}
+                                               className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#14F195] to-emerald-500 text-black font-bold rounded-xl hover:shadow-[0_0_20px_rgba(20,241,149,0.5)] transition-all disabled:opacity-50"
+                                           >
+                                               {executingProposal ? (
+                                                   <Loader2 className="w-5 h-5 animate-spin" />
+                                               ) : (
+                                                   <Play className="w-5 h-5" />
+                                               )}
+                                               Execute Transfer
+                                           </button>
+                                       ) : (
+                                           publicKey?.toBase58() === proposal.author && (
+                                               <button
+                                                   onClick={handleReclaimFunds}
+                                                   disabled={executingProposal || !publicKey}
+                                                   className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl hover:shadow-[0_0_20px_rgba(249,115,22,0.5)] transition-all disabled:opacity-50"
+                                               >
+                                                   {executingProposal ? (
+                                                       <Loader2 className="w-5 h-5 animate-spin" />
+                                                   ) : (
+                                                       <Undo2 className="w-5 h-5" />
+                                                   )}
+                                                   Reclaim Funds
+                                               </button>
+                                           )
+                                       )}
+                                   </>
+                               )}
+                           </div>
+                       )}
+                       
+                       {(treasuryInfo.executed || escrowEmpty) && (
+                           <div className="flex items-center gap-2 text-emerald-400 text-sm mt-4">
+                               <CheckCircle className="w-4 h-4" />
+                               <span>Transfer completed</span>
+                           </div>
+                       )}
+                   </div>
+               )}
 
                {/* Results Bar */}
                <div className="mb-8 relative z-10">

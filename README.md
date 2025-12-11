@@ -47,8 +47,8 @@ This allows anyone to participate in governance without needing to acquire token
 ### 🔮 Hybrid & Quadratic Voting
 Pulsar DAO combines **Liquid Democracy** with **Quadratic Voting** to create a fair and resilient governance model.
 
-**1. Quadratic Voting (The \"Fairness\" Engine)**  
-To prevent \"whale dominance\" (where 1 wealthy user outvotes everyone), we calculate voting power using the **Square Root** of token holdings.
+#### 1. Quadratic Voting (The "Fairness" Engine)
+To prevent "whale dominance" (where 1 wealthy user outvotes everyone), we calculate voting power using the **Square Root** of token holdings.
 - **Concept:** Voting power increases quadratically slower than token holding.
 - **The Math:** `Voting Power = √Tokens`
 - **Example:**
@@ -56,13 +56,15 @@ To prevent \"whale dominance\" (where 1 wealthy user outvotes everyone), we calc
     - Holder B has **10,000 Tokens** → Gets **100 Votes**.
 - **Impact:** To have **10x** the influence, a user needs **100x** the tokens. This balances the playing field between large stakeholders and the broader community.
 
-**2. Hybrid Strategy**  
+#### 2. Hybrid Strategy
 Your total influence is a dynamic sum of two sources:
 - **Liquid Balance:** Tokens held in your wallet (Example: 100 tokens = 10 power).
 - **Staked Balance:** Tokens locked in the DAO Vault, which receive a **Time Multiplier** bonus.
 
 **Master Formula:**  
 `Voting Power = √Liquid_Tokens + (√Staked_Tokens × Time_Multiplier)`
+
+---
 
 ### 🔐 Global Staking
 - **Unified Stake Record:** A single staking account per user simplifies management.
@@ -73,6 +75,8 @@ Your total influence is a dynamic sum of two sources:
     - **180 Seconds:** 4x Multiplier
     - **360 Seconds:** 5x Max Multiplier
 - **Security:** Strict on-chain validation prevents unstaking before lock expiry.
+
+---
 
 ### 💧 Liquid Delegation
 A powerful yet secure delegation system allowing users to trust experts with their governance power.
@@ -93,22 +97,46 @@ If your Delegate casts a vote on your behalf, that vote is **LOCKED** for the du
 - **Batch Processing:** Delegates can cast or withdraw votes for all their delegators in a single, gas-efficient transaction.
 - **Visual Indicators:** Clear UI warnings for proxy lock status and delegation state.
 
+---
+
 ### ⏳ Time-Limited Proposals
 Every proposal is created with a specific, immutable deadline to ensure timely governance decisions.
 - **Custom Duration:** Proposal creators define the voting window (e.g., 24 hours, 7 days).
 - **Automatic Expiry:** Smart contracts rigidly enforce the deadline using the on-chain `Clock`. Once time is up, no new votes or withdrawals are accepted.
 
-### 🔔 Smart Notifications
-- **Real-Time Updates:** A bell icon alerts users to new proposals instantly.
-- **Smart Tracking:** The system remembers which proposals a user has seen, showing a \"New\" indicator only for relevant items.
-- **Auto-Read:** Viewing a proposal or clicking the notification automatically marks it as read.
+---
+
+### 💰 Treasury Proposals (Trustless Execution)
+A novel feature allowing proposal creators to attach token transfers that execute automatically when proposals pass.
+
+#### How It Works
+1. **Create:** Author creates a proposal with attached $PULSAR tokens
+2. **Escrow:** Tokens are deposited into a secure PDA escrow account
+3. **Vote:** Community votes YES or NO
+4. **Execute:**
+   - If **YES > NO:** Anyone can trigger transfer to destination
+   - If **NO ≥ YES (Tie or Defeat):** Proposal fails, Author can reclaim their tokens
+
+#### Features
+- **Trustless:** No admin intervention needed for execution
+- **Configurable Timelock:** Optional grace period (in seconds) after voting ends
+- **Security:** Only author can reclaim failed proposals
+- **Tie Breaker:** Ties count as defeat (Status Quo bias)
+
+---
 
 ### ⚡ Advanced Vote Management
 - **Switch Vote:** Specific support allows users to change their opinion (e.g., YES → NO) dynamically while the proposal is active.
 - **Withdraw Vote:** Users can retract their vote entirely to reclaim their governance weight or correct mistakes.
 
-### 🛡️ Circuit Breaker (Safety Module)
-An admin-controlled \"Emergency Stop\" system. If a critical vulnerability is detected, the **Circuit Breaker** can be tripped to instantly pause all voting and withdrawal actions, protecting DAO assets.
+---
+
+### 🔔 Smart Notifications
+- **Real-Time Updates:** A bell icon alerts users to new proposals instantly.
+- **Smart Tracking:** The system remembers which proposals a user has seen, showing a "New" indicator only for relevant items.
+- **Auto-Read:** Viewing a proposal or clicking the notification automatically marks it as read.
+
+---
 
 ### 📊 Analytics Dashboard
 A real-time analytics hub provides deep insights into DAO activity:
@@ -116,6 +144,13 @@ A real-time analytics hub provides deep insights into DAO activity:
 - **Engagement Charts:** Visual bar charts showing YES/NO vote distribution per proposal.
 - **Sentiment Analysis:** Global pie chart aggregating historical voting trends.
 - **Top Proposals:** Leaderboard of the most engaged proposals.
+
+---
+
+### 🛡️ Circuit Breaker (Safety Module)
+An admin-controlled "Emergency Stop" system. If a critical vulnerability is detected, the **Circuit Breaker** can be tripped to instantly pause all voting and withdrawal actions, protecting DAO assets.
+
+---
 
 ### 👮 Admin & Security
 - **Open Access (Testing):** To facilitate community testing, **Proposal Creation is currently OPEN to all users**.
@@ -127,9 +162,10 @@ A real-time analytics hub provides deep insights into DAO activity:
 ## 📊 Quality Metrics
 
 ### Testing
-- ✅ **19/19 tests passing** on localnet
+- ✅ **29/29 tests passing** on localnet
 - ✅ Comprehensive delegation scenarios covered
 - ✅ Proxy lock enforcement verified
+- ✅ Treasury proposal lifecycle tested
 
 ### Code Quality
 - ✅ **0 compilation warnings**
@@ -228,7 +264,12 @@ We maintain a rigorous test suite (`tests/pulsar_dao.ts`) that verifies 19 criti
     *   **Exclusivity:** Confirms Delegators are blocked from manual voting.
     *   **Proxy Voting:** Validates Delegates voting on behalf of others.
     *   **Proxy Lock:** Ensures proxy votes cannot be withdrawn by the delegator (Security).
-    *   **Revocation:** Tests clean removal of delegation rights.
+*   **Treasury Proposals:**
+    *   **Create with Escrow:** Verifies token transfer to PDA.
+    *   **Block Early Execution:** Ensures execution fails before deadline.
+    *   **Execute on YES:** Validates funds transfer to destination.
+    *   **Reclaim on NO:** Tests author fund recovery.
+    *   **Timelock Enforcement:** Validates grace period logic.
 
 **Run the full suite:**
 ```bash
@@ -278,7 +319,8 @@ Pulsar DAO demonstrates:
 - **Innovation:** Proxy Lock is a novel governance primitive
 - **Security:** Multiple layers of constraint validation
 - **Usability:** Clean UI with clear visual feedback
-- **Reliability:** Comprehensive test coverage (19/19 passing)
+- **Reliability:** Comprehensive test coverage (29/29 passing)
+- **Treasury Execution:** Trustless on-chain token transfers
 - **Production Quality:** Zero warnings, idiomatic code
 
 ---

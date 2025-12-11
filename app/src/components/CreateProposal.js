@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { SystemProgram, PublicKey } from '@solana/web3.js';
-import { connection, program, globalAccountPDAAddress, proposalSeed, programId } from '../config';
+import { SystemProgram, PublicKey, SYSVAR_RENT_PUBKEY } from '@solana/web3.js';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { connection, program, globalAccountPDAAddress, proposalSeed, programId, proposalEscrowSeed } from '../config';
 import { BN } from 'bn.js';
-import { Loader2, CheckCircle } from 'lucide-react';
+import { Loader2, CheckCircle, Coins, ToggleLeft, ToggleRight } from 'lucide-react';
 
 const CreateProposal = () => {
     // ... (state vars) 
@@ -16,6 +17,39 @@ const CreateProposal = () => {
   const [createSuccess, setCreateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
+
+  // Treasury proposal state
+  const [isTreasuryProposal, setIsTreasuryProposal] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [destinationAddress, setDestinationAddress] = useState('');
+  const [timelockSeconds, setTimelockSeconds] = useState('60'); // Default 60 seconds for demo
+  const [tokenMint, setTokenMint] = useState(null);
+  const [userBalance, setUserBalance] = useState(0);
+
+  // Fetch token mint and user balance on load
+  useEffect(() => {
+    const fetchMintAndBalance = async () => {
+      try {
+        const votingProgram = program({ publicKey: null });
+        const globalAccount = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
+        setTokenMint(globalAccount.tokenMint);
+        
+        // Fetch user balance if wallet connected
+        if (publicKey && globalAccount.tokenMint) {
+          const ata = await getAssociatedTokenAddress(globalAccount.tokenMint, publicKey);
+          try {
+            const balanceResult = await connection.getTokenAccountBalance(ata);
+            setUserBalance(Number(balanceResult.value.amount));
+          } catch (e) {
+            setUserBalance(0);
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch token mint", e);
+      }
+    };
+    fetchMintAndBalance();
+  }, [publicKey]);
 
   function toLittleEndian8Bytes(num) {
     const buffer = Buffer.alloc(8);
@@ -34,6 +68,20 @@ const CreateProposal = () => {
     if (!proposalQuestion.trim()) {
       setErrorMessage('Please enter a valid question.');
       return;
+    }
+
+    // Validate treasury fields if enabled
+    if (isTreasuryProposal) {
+      if (!transferAmount || parseFloat(transferAmount) <= 0) {
+        setErrorMessage('Please enter a valid transfer amount.');
+        return;
+      }
+      try {
+        new PublicKey(destinationAddress);
+      } catch {
+        setErrorMessage('Please enter a valid destination address.');
+        return;
+      }
     }
 
     setErrorMessage('');
@@ -58,9 +106,10 @@ const CreateProposal = () => {
       }
 
       const proposalsCounter = Number(globalAccount.proposalCount.toString());
+      const nextProposalId = proposalsCounter + 1;
 
       const [proposalPDAAddress] = PublicKey.findProgramAddressSync(
-        [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(proposalsCounter + 1))],
+        [Buffer.from(proposalSeed), Buffer.from(toLittleEndian8Bytes(nextProposalId))],
         programId
       );
 
@@ -69,15 +118,52 @@ const CreateProposal = () => {
       const now = Math.floor(Date.now() / 1000);
       const deadlineTimestamp = new BN(now + (duration * 60));
 
-      const transaction = await votingProgram.methods
-        .createProposal(proposalQuestion, deadlineTimestamp)
-        .accounts({
-          globalAccount: globalAccountPDAAddress,
-          proposalAccount: proposalPDAAddress,
-          author: publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .transaction();
+      let transaction;
+
+      if (isTreasuryProposal) {
+        // Treasury Proposal - with token escrow
+        const [proposalEscrowPDA] = PublicKey.findProgramAddressSync(
+          [Buffer.from(proposalEscrowSeed), Buffer.from(toLittleEndian8Bytes(nextProposalId))],
+          programId
+        );
+
+        const mintPubkey = new PublicKey(tokenMint);
+        const authorATA = await getAssociatedTokenAddress(mintPubkey, publicKey);
+        const amountInLamports = new BN(parseInt(transferAmount)); // Token has 0 decimals
+        const destination = new PublicKey(destinationAddress);
+
+        transaction = await votingProgram.methods
+          .createTreasuryProposal(
+            proposalQuestion, 
+            deadlineTimestamp, 
+            amountInLamports, 
+            destination,
+            new BN(timelockSeconds)
+          )
+          .accounts({
+            globalAccount: globalAccountPDAAddress,
+            proposalAccount: proposalPDAAddress,
+            proposalEscrow: proposalEscrowPDA,
+            tokenMint: mintPubkey,
+            authorTokenAccount: authorATA,
+            author: publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            rent: SYSVAR_RENT_PUBKEY,
+          })
+          .transaction();
+      } else {
+        // Standard Proposal - no treasury
+        transaction = await votingProgram.methods
+          .createProposal(proposalQuestion, deadlineTimestamp)
+          .accounts({
+            globalAccount: globalAccountPDAAddress,
+            proposalAccount: proposalPDAAddress,
+            author: publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .transaction();
+      }
 
       const transactionSignature = await sendTransaction(transaction, connection);
 
@@ -90,11 +176,12 @@ const CreateProposal = () => {
         },
         'finalized'
       );      
+      
       // Success Transition
       setLoading(false);
       setCreateSuccess(true);
       setTimeout(() => {
-            navigate(`/proposal/${proposalsCounter + 1}`);
+            navigate(`/proposal/${nextProposalId}`);
       }, 2000);
 
     } catch (error) {
@@ -153,17 +240,117 @@ const CreateProposal = () => {
             Duration (minutes)
           </label>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={duration}
-            onChange={(e) => setDuration(e.target.value)}
+            onChange={(e) => setDuration(e.target.value.replace(/[^0-9]/g, ''))}
             className="w-full bg-[#1a1c2e] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#14F195] transition-colors"
-            min="1"
+            placeholder="10"
             disabled={loading}
           />
           <p className="text-xs text-gray-500 mt-2">
             The proposal will be active for this duration.
           </p>
         </div>
+
+        {/* Treasury Toggle */}
+        <div className="border-t border-white/10 pt-6">
+          <button
+            type="button"
+            onClick={() => setIsTreasuryProposal(!isTreasuryProposal)}
+            disabled={loading}
+            className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+              isTreasuryProposal 
+                ? 'bg-[#14F195]/10 border-[#14F195]/30' 
+                : 'bg-[#1a1c2e] border-white/10 hover:border-white/20'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Coins className={`w-5 h-5 ${isTreasuryProposal ? 'text-[#14F195]' : 'text-gray-400'}`} />
+              <div className="text-left">
+                <span className={`font-medium ${isTreasuryProposal ? 'text-[#14F195]' : 'text-white'}`}>
+                  Treasury Transfer
+                </span>
+                <p className="text-xs text-gray-500">Include tokens to be sent upon approval</p>
+              </div>
+            </div>
+            {isTreasuryProposal ? (
+              <ToggleRight className="w-8 h-8 text-[#14F195]" />
+            ) : (
+              <ToggleLeft className="w-8 h-8 text-gray-500" />
+            )}
+          </button>
+        </div>
+
+        {/* Treasury Fields (Conditional) */}
+        {isTreasuryProposal && (
+          <div className="space-y-4 p-4 bg-[#14F195]/5 rounded-xl border border-[#14F195]/20 animate-in slide-in-from-top duration-300">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-[#14F195]">
+                  Transfer Amount ($PULSAR)
+                </label>
+                <span className="text-xs text-gray-400">
+                  Balance: <span className="text-[#14F195] font-mono">{userBalance.toLocaleString()}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTransferAmount(userBalance.toString())}
+                    className="ml-2 text-[#14F195] hover:underline"
+                  >
+                    MAX
+                  </button>
+                </span>
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={transferAmount}
+                onChange={(e) => setTransferAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="100"
+                className="w-full bg-[#1a1c2e] border border-[#14F195]/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#14F195] transition-colors"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                These tokens will be escrowed until the vote ends.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#14F195] mb-2">
+                Destination Address
+              </label>
+              <input
+                type="text"
+                value={destinationAddress}
+                onChange={(e) => setDestinationAddress(e.target.value)}
+                placeholder="Recipient wallet address..."
+                className="w-full bg-[#1a1c2e] border border-[#14F195]/30 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-[#14F195] transition-colors"
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#14F195] mb-2">
+                Timelock (seconds after voting ends)
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={timelockSeconds}
+                onChange={(e) => setTimelockSeconds(e.target.value.replace(/[^0-9]/g, ''))}
+                className="w-full bg-[#1a1c2e] border border-[#14F195]/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#14F195] transition-colors"
+                placeholder="60"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Grace period before execution is allowed. Set to 0 for immediate.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {errorMessage && (
@@ -187,7 +374,7 @@ const CreateProposal = () => {
             disabled={loading || !publicKey}
             className="flex-1 bg-gradient-to-r from-[#14F195] to-[#9945FF] text-white font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(20,241,149,0.5)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Creating...' : 'Create Proposal'}
+            {loading ? 'Creating...' : (isTreasuryProposal ? 'Create & Deposit Tokens' : 'Create Proposal')}
           </button>
         </div>
       </div>
@@ -196,3 +383,4 @@ const CreateProposal = () => {
 };
 
 export default CreateProposal;
+

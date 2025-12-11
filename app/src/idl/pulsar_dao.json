@@ -48,10 +48,7 @@
         },
         {
           "name": "token_mint",
-          "writable": true,
-          "relations": [
-            "global_account"
-          ]
+          "writable": true
         },
         {
           "name": "target_token_account",
@@ -60,10 +57,7 @@
         {
           "name": "admin",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "global_account"
-          ]
+          "signer": true
         },
         {
           "name": "token_program",
@@ -138,6 +132,105 @@
         },
         {
           "name": "deadline",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "create_treasury_proposal",
+      "docs": [
+        "Create a treasury proposal with tokens deposited to escrow"
+      ],
+      "discriminator": [
+        88,
+        247,
+        83,
+        20,
+        45,
+        74,
+        104,
+        183
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_account",
+          "writable": true
+        },
+        {
+          "name": "proposal_escrow",
+          "writable": true
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "author_token_account",
+          "writable": true
+        },
+        {
+          "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "question",
+          "type": "string"
+        },
+        {
+          "name": "deadline",
+          "type": "i64"
+        },
+        {
+          "name": "transfer_amount",
+          "type": "u64"
+        },
+        {
+          "name": "transfer_destination",
+          "type": "pubkey"
+        },
+        {
+          "name": "timelock_seconds",
           "type": "i64"
         }
       ]
@@ -340,6 +433,129 @@
       ]
     },
     {
+      "name": "execute_proposal",
+      "docs": [
+        "Execute a passed treasury proposal (anyone can call)"
+      ],
+      "discriminator": [
+        186,
+        60,
+        116,
+        133,
+        108,
+        128,
+        111,
+        28
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "executor",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_number",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "initialize",
       "discriminator": [
         175,
@@ -447,6 +663,129 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "reclaim_proposal_funds",
+      "docs": [
+        "Reclaim funds from a failed treasury proposal (author only)"
+      ],
+      "discriminator": [
+        56,
+        232,
+        90,
+        188,
+        237,
+        71,
+        56,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "author_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_number",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "register_delegate",
@@ -582,6 +921,32 @@
       ],
       "accounts": [
         {
+          "name": "global_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "delegate_profile",
           "writable": true,
           "pda": {
@@ -620,36 +985,7 @@
         {
           "name": "admin",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "global_account"
-          ]
-        },
-        {
-          "name": "global_account",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  103,
-                  108,
-                  111,
-                  98,
-                  97,
-                  108,
-                  95,
-                  97,
-                  99,
-                  99,
-                  111,
-                  117,
-                  110,
-                  116
-                ]
-              }
-            ]
-          }
+          "signer": true
         }
       ],
       "args": []
@@ -692,7 +1028,6 @@
         },
         {
           "name": "global_account",
-          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -1678,6 +2013,32 @@
   ],
   "events": [
     {
+      "name": "ProposalExecuted",
+      "discriminator": [
+        92,
+        213,
+        189,
+        201,
+        101,
+        83,
+        111,
+        83
+      ]
+    },
+    {
+      "name": "ProposalFundsReclaimed",
+      "discriminator": [
+        63,
+        229,
+        64,
+        0,
+        229,
+        105,
+        7,
+        255
+      ]
+    },
+    {
       "name": "VoteCast",
       "discriminator": [
         39,
@@ -1791,6 +2152,41 @@
       "code": 6019,
       "name": "ProxyVoteLocked",
       "msg": "Vote was cast by proxy and is locked (cannot be withdrawn or changed)."
+    },
+    {
+      "code": 6020,
+      "name": "ProposalNotEnded",
+      "msg": "Proposal voting has not ended yet."
+    },
+    {
+      "code": 6021,
+      "name": "TimelockNotPassed",
+      "msg": "Timelock period has not passed yet."
+    },
+    {
+      "code": 6022,
+      "name": "ProposalNotPassed",
+      "msg": "Proposal was not approved (YES > NO required)."
+    },
+    {
+      "code": 6023,
+      "name": "ProposalPassed",
+      "msg": "Proposal passed, cannot reclaim funds."
+    },
+    {
+      "code": 6024,
+      "name": "AlreadyExecuted",
+      "msg": "Proposal has already been executed."
+    },
+    {
+      "code": 6025,
+      "name": "InvalidAmount",
+      "msg": "Transfer amount must be greater than 0."
+    },
+    {
+      "code": 6026,
+      "name": "NotTreasuryProposal",
+      "msg": "This is not a treasury proposal."
     }
   ],
   "types": [
@@ -1894,6 +2290,74 @@
           {
             "name": "is_active",
             "type": "bool"
+          },
+          {
+            "name": "proposal_type",
+            "type": "u8"
+          },
+          {
+            "name": "transfer_amount",
+            "type": "u64"
+          },
+          {
+            "name": "transfer_destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "timelock_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "executed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "executor",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "success",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalFundsReclaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "author",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
           }
         ]
       }

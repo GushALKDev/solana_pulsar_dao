@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { Bell, Droplets, Loader2, Check } from 'lucide-react';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { Bell, Droplets, Loader2, Check, Coins } from 'lucide-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { program, globalAccountPDAAddress, faucetSeed, programId, proposalSeed } from '../config';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import * as token from '@solana/spl-token';
@@ -13,7 +13,9 @@ const DashboardLayout = ({ children }) => {
   const location = useLocation();
   const wallet = useWallet();
   const { publicKey } = wallet;
+  const { connection } = useConnection();
   const [requesting, setRequesting] = useState(false);
+  const [userBalance, setUserBalance] = useState(null);
   
   // Notification State
   const [notifications, setNotifications] = useState([]);
@@ -29,6 +31,31 @@ const DashboardLayout = ({ children }) => {
     buffer.writeUInt32LE(num, 0);
     return buffer;
   }
+
+  // Fetch user token balance
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!publicKey) {
+        setUserBalance(null);
+        return;
+      }
+      try {
+        const votingProgram = program({ publicKey: null });
+        const globalAccount = await votingProgram.account.globalAccount.fetch(globalAccountPDAAddress);
+        const tokenMint = globalAccount.tokenMint;
+        
+        const ata = await token.getAssociatedTokenAddress(tokenMint, publicKey);
+        const balanceResult = await connection.getTokenAccountBalance(ata);
+        setUserBalance(Number(balanceResult.value.amount));
+      } catch (e) {
+        setUserBalance(0);
+      }
+    };
+    fetchBalance();
+    // Refresh balance every 10 seconds
+    const interval = setInterval(fetchBalance, 10000);
+    return () => clearInterval(interval);
+  }, [publicKey, connection]);
 
   // Poll for Notifications
   React.useEffect(() => {
@@ -174,7 +201,20 @@ const DashboardLayout = ({ children }) => {
       {/* Main Content Area */}
       <div className="flex-1 ml-64">
         {/* Header */}
-        <header className="h-20 px-8 flex items-center justify-end bg-transparent sticky top-0 z-40">
+        <header className="h-20 px-8 flex items-center justify-between bg-transparent sticky top-0 z-40">
+            
+            {/* Left Side - Balance */}
+            <div className="flex items-center gap-2">
+              {publicKey && userBalance !== null && (
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-xl">
+                  <Coins size={18} className="text-[#14F195]" />
+                  <span className="text-sm font-mono text-white">
+                    {userBalance.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-gray-400">$PULSAR</span>
+                </div>
+              )}
+            </div>
             
             <div className="flex items-center gap-6">
                 

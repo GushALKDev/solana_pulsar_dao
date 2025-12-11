@@ -573,4 +573,286 @@ describe("Pulsar DAO Comprehensive Test Suite", () => {
     }
   });
 
+  // =========================================================================
+  // TREASURY PROPOSALS
+  // =========================================================================
+
+  let treasuryProposalPDA: anchor.web3.PublicKey;
+  let treasuryProposalId: number;
+  let proposalEscrowPDA: anchor.web3.PublicKey;
+  const destinationUser = anchor.web3.Keypair.generate();
+  let destinationATA: anchor.web3.PublicKey;
+
+  it("Setup: Fund destination user and create ATA", async () => {
+    // Fund destination user
+    const tx = new anchor.web3.Transaction().add(
+      anchor.web3.SystemProgram.transfer({
+        fromPubkey: provider.wallet.publicKey,
+        toPubkey: destinationUser.publicKey,
+        lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
+      })
+    );
+    await provider.sendAndConfirm(tx);
+
+    // Create ATA for destination
+    destinationATA = (await getOrCreateAssociatedTokenAccount(
+      provider.connection, 
+      (owner as any).payer, 
+      mint, 
+      destinationUser.publicKey
+    )).address;
+  });
+
+  it("Creates Treasury Proposal with Token Escrow", async () => {
+    const globalAccount = await program.account.globalAccount.fetch(globalPDAAddress);
+    treasuryProposalId = globalAccount.proposalCount.toNumber() + 1;
+
+    const buffer = Buffer.alloc(8);
+    buffer.writeBigUInt64LE(BigInt(treasuryProposalId));
+
+    [treasuryProposalPDA] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("proposal"), buffer],
+      program.programId
+    );
+
+    [proposalEscrowPDA] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("proposal_escrow"), buffer],
+      program.programId
+    );
+
+    // User1 creates treasury proposal with 50 tokens
+    const now = Math.floor(Date.now() / 1000);
+    const deadline = new BN(now + 5); // 5 seconds for testing
+    const transferAmount = new BN(50);
+    const timelockSeconds = new BN(2); // 2 seconds timelock
+
+    // Check user1 balance before
+    const balBefore = await provider.connection.getTokenAccountBalance(user1ATA);
+    const beforeAmount = parseInt(balBefore.value.amount);
+
+    await program.methods
+      .createTreasuryProposal(
+        "Should we fund the destination?",
+        deadline,
+        transferAmount,
+        destinationUser.publicKey,
+        timelockSeconds
+      )
+      .accounts({
+        globalAccount: globalPDAAddress,
+        proposalAccount: treasuryProposalPDA,
+        proposalEscrow: proposalEscrowPDA,
+        tokenMint: mint,
+        authorTokenAccount: user1ATA,
+        author: user1.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([user1])
+      .rpc();
+
+    // Verify proposal created
+    const proposal = await program.account.proposalAccount.fetch(treasuryProposalPDA);
+    expect(proposal.proposalType).to.eq(1); // TreasuryTransfer
+    expect(proposal.transferAmount.toNumber()).to.eq(50);
+    expect(proposal.transferDestination.toString()).to.eq(destinationUser.publicKey.toString());
+    expect(proposal.executed).to.be.false;
+
+    // Verify tokens in escrow
+    const escrowBal = await provider.connection.getTokenAccountBalance(proposalEscrowPDA);
+    expect(parseInt(escrowBal.value.amount)).to.eq(50);
+
+    // Verify user1 balance decreased
+    const balAfter = await provider.connection.getTokenAccountBalance(user1ATA);
+    expect(parseInt(balAfter.value.amount)).to.eq(beforeAmount - 50);
+  });
+
+  it("Cannot Execute Before Voting Ends", async () => {
+    try {
+      await program.methods
+        .executeProposal(new BN(treasuryProposalId))
+        .accounts({
+          globalAccount: globalPDAAddress,
+          proposalAccount: treasuryProposalPDA,
+          proposalEscrow: proposalEscrowPDA,
+          destinationTokenAccount: destinationATA,
+          tokenMint: mint,
+          executor: user2.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user2])
+        .rpc();
+      expect.fail("Should have failed - voting not ended");
+    } catch(e) {
+      expect(e.message).to.include("Proposal voting has not ended yet");
+    }
+  });
+
+  it("Wait for Proposal to End + Timelock", async () => {
+    // Wait 8 seconds (5 voting + 2 timelock + buffer)
+    await new Promise(resolve => setTimeout(resolve, 8000));
+  });
+
+  it("Cannot Execute if NO >= YES (no votes cast)", async () => {
+    // No votes were cast, so YES=0 and NO=0, meaning NO >= YES
+    try {
+      await program.methods
+        .executeProposal(new BN(treasuryProposalId))
+        .accounts({
+          globalAccount: globalPDAAddress,
+          proposalAccount: treasuryProposalPDA,
+          proposalEscrow: proposalEscrowPDA,
+          destinationTokenAccount: destinationATA,
+          tokenMint: mint,
+          executor: user2.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user2])
+        .rpc();
+      expect.fail("Should have failed - proposal not passed");
+    } catch(e) {
+      expect(e.message).to.include("Proposal was not approved");
+    }
+  });
+
+  it("Author Reclaims Funds (NO >= YES)", async () => {
+    const balBefore = await provider.connection.getTokenAccountBalance(user1ATA);
+    const beforeAmount = parseInt(balBefore.value.amount);
+
+    await program.methods
+      .reclaimProposalFunds(new BN(treasuryProposalId))
+      .accounts({
+        globalAccount: globalPDAAddress,
+        proposalAccount: treasuryProposalPDA,
+        proposalEscrow: proposalEscrowPDA,
+        authorTokenAccount: user1ATA,
+        tokenMint: mint,
+        author: user1.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user1])
+      .rpc();
+
+    // Verify proposal marked executed
+    const proposal = await program.account.proposalAccount.fetch(treasuryProposalPDA);
+    expect(proposal.executed).to.be.true;
+
+    // Verify tokens returned to author
+    const balAfter = await provider.connection.getTokenAccountBalance(user1ATA);
+    expect(parseInt(balAfter.value.amount)).to.eq(beforeAmount + 50);
+  });
+
+  // Test successful execution flow
+  let treasuryProposal2PDA: anchor.web3.PublicKey;
+  let treasuryProposal2Id: number;
+  let proposal2EscrowPDA: anchor.web3.PublicKey;
+
+  it("Creates Second Treasury Proposal for Execute Test", async () => {
+    const globalAccount = await program.account.globalAccount.fetch(globalPDAAddress);
+    treasuryProposal2Id = globalAccount.proposalCount.toNumber() + 1;
+
+    const buffer = Buffer.alloc(8);
+    buffer.writeBigUInt64LE(BigInt(treasuryProposal2Id));
+
+    [treasuryProposal2PDA] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("proposal"), buffer],
+      program.programId
+    );
+
+    [proposal2EscrowPDA] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("proposal_escrow"), buffer],
+      program.programId
+    );
+
+    const now = Math.floor(Date.now() / 1000);
+    const deadline = new BN(now + 3); // 3 seconds
+    const transferAmount = new BN(25);
+    const timelockSeconds = new BN(1); // 1 second
+
+    await program.methods
+      .createTreasuryProposal(
+        "Fund destination (will pass)?",
+        deadline,
+        transferAmount,
+        destinationUser.publicKey,
+        timelockSeconds
+      )
+      .accounts({
+        globalAccount: globalPDAAddress,
+        proposalAccount: treasuryProposal2PDA,
+        proposalEscrow: proposal2EscrowPDA,
+        tokenMint: mint,
+        authorTokenAccount: user1ATA,
+        author: user1.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([user1])
+      .rpc();
+  });
+
+  it("User2 Votes YES on Treasury Proposal 2", async () => {
+    const [voterRecordPDA] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("voter"), treasuryProposal2PDA.toBuffer(), user2.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // User2 needs delegation record (empty = not delegating)
+    const [delegationRecordPDA] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("delegation_record"), user2.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .vote(true)
+      .accounts({
+        globalAccount: globalPDAAddress,
+        proposalAccount: treasuryProposal2PDA,
+        voterRecord: voterRecordPDA,
+        stakeRecord: null,
+        userTokenAccount: user2ATA,
+        delegationRecord: delegationRecordPDA,
+        user: user2.publicKey,
+      })
+      .signers([user2])
+      .rpc();
+
+    const proposal = await program.account.proposalAccount.fetch(treasuryProposal2PDA);
+    expect(proposal.yes.toNumber()).to.be.greaterThan(0);
+  });
+
+  it("Wait for Proposal 2 to End + Timelock", async () => {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  });
+
+  it("Anyone Executes Passed Treasury Proposal", async () => {
+    const destBalBefore = await provider.connection.getTokenAccountBalance(destinationATA);
+    const beforeAmount = parseInt(destBalBefore.value.amount);
+
+    // User2 (not author) executes
+    await program.methods
+      .executeProposal(new BN(treasuryProposal2Id))
+      .accounts({
+        globalAccount: globalPDAAddress,
+        proposalAccount: treasuryProposal2PDA,
+        proposalEscrow: proposal2EscrowPDA,
+        destinationTokenAccount: destinationATA,
+        tokenMint: mint,
+        executor: user2.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user2])
+      .rpc();
+
+    // Verify proposal marked executed
+    const proposal = await program.account.proposalAccount.fetch(treasuryProposal2PDA);
+    expect(proposal.executed).to.be.true;
+
+    // Verify tokens transferred to destination
+    const destBalAfter = await provider.connection.getTokenAccountBalance(destinationATA);
+    expect(parseInt(destBalAfter.value.amount)).to.eq(beforeAmount + 25);
+  });
+
 });

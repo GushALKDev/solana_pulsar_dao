@@ -360,8 +360,8 @@ const Home = () => {
                 </button>
             </div>
 
-            {/* Create Button only for Admin */}
-            {admin === publicKey?.toString() && (
+            {/* Create Button - Open to all users (for testing purposes) */}
+            {publicKey && (
                  <Link to="/create-proposal">
                     <button className="px-4 py-2 bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white rounded-lg font-bold text-sm hover:shadow-[0_0_20px_rgba(153,69,255,0.5)] transition-all duration-300">
                         + Create Proposal

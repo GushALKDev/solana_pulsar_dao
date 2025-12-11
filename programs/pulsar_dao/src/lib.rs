@@ -124,6 +124,12 @@ pub mod pulsar_dao {
         proposal_account.no = 0;
         proposal_account.deadline = deadline;
         proposal_account.is_active = true;
+        // Default values for treasury fields (Standard proposal)
+        proposal_account.proposal_type = 0;
+        proposal_account.transfer_amount = 0;
+        proposal_account.transfer_destination = ctx.accounts.author.key(); // Placeholder
+        proposal_account.timelock_seconds = 0;
+        proposal_account.executed = false;
 
         Ok(())
     }
@@ -489,6 +495,165 @@ pub mod pulsar_dao {
             voter_record.voting_power = 0;
             voter_record.voted_by_proxy = false;
         }
+
+        Ok(())
+    }
+
+    ////////////////////////////////////////////////////////////////
+    //              TREASURY PROPOSAL INSTRUCTIONS
+    ////////////////////////////////////////////////////////////////
+
+    /// Create a treasury proposal with tokens deposited to escrow
+    pub fn create_treasury_proposal(
+        ctx: Context<CreateTreasuryProposal>,
+        question: String,
+        deadline: i64,
+        transfer_amount: u64,
+        transfer_destination: Pubkey,
+        timelock_seconds: i64,
+    ) -> Result<()> {
+        let global_account = &mut ctx.accounts.global_account;
+        require!(global_account.system_enabled, ErrorCode::CircuitBreakerTripped);
+        require!(transfer_amount > 0, ErrorCode::InvalidAmount);
+
+        // Transfer tokens from author to escrow
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.author_token_account.to_account_info(),
+                    to: ctx.accounts.proposal_escrow.to_account_info(),
+                    authority: ctx.accounts.author.to_account_info(),
+                },
+            ),
+            transfer_amount,
+        )?;
+
+        global_account.proposal_count += 1;
+
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        proposal_account.number = global_account.proposal_count;
+        proposal_account.author = ctx.accounts.author.key();
+        proposal_account.question = question;
+        proposal_account.yes = 0;
+        proposal_account.no = 0;
+        proposal_account.deadline = deadline;
+        proposal_account.is_active = true;
+        proposal_account.proposal_type = 1; // TreasuryTransfer
+        proposal_account.transfer_amount = transfer_amount;
+        proposal_account.transfer_destination = transfer_destination;
+        proposal_account.timelock_seconds = timelock_seconds;
+        proposal_account.executed = false;
+
+        Ok(())
+    }
+
+    /// Execute a passed treasury proposal (anyone can call)
+    pub fn execute_proposal(
+        ctx: Context<ExecuteProposal>,
+        proposal_number: u64,
+    ) -> Result<()> {
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        let clock = Clock::get()?;
+
+        // Validate proposal state
+        require!(!proposal_account.executed, ErrorCode::AlreadyExecuted);
+        require!(clock.unix_timestamp > proposal_account.deadline, ErrorCode::ProposalNotEnded);
+        
+        // Check timelock
+        let execution_unlock_time = proposal_account.deadline + proposal_account.timelock_seconds;
+        require!(clock.unix_timestamp >= execution_unlock_time, ErrorCode::TimelockNotPassed);
+        
+        // Check vote result
+        require!(proposal_account.yes > proposal_account.no, ErrorCode::ProposalNotPassed);
+
+        // Validate destination matches stored destination
+        require!(
+            ctx.accounts.destination_token_account.owner == proposal_account.transfer_destination,
+            ErrorCode::Unauthorized
+        );
+
+        // Transfer from escrow to destination
+        let proposal_number_bytes = proposal_number.to_le_bytes();
+        let seeds = &[
+            contexts::PROPOSAL_ESCROW_SEED,
+            proposal_number_bytes.as_ref(),
+            &[ctx.bumps.proposal_escrow],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.proposal_escrow.to_account_info(),
+                    to: ctx.accounts.destination_token_account.to_account_info(),
+                    authority: ctx.accounts.proposal_escrow.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            proposal_account.transfer_amount,
+        )?;
+
+        proposal_account.executed = true;
+        proposal_account.is_active = false;
+
+        emit!(ProposalExecuted {
+            proposal: proposal_account.key(),
+            executor: ctx.accounts.executor.key(),
+            destination: proposal_account.transfer_destination,
+            amount: proposal_account.transfer_amount,
+            success: true,
+        });
+
+        Ok(())
+    }
+
+    /// Reclaim funds from a failed treasury proposal (author only)
+    pub fn reclaim_proposal_funds(
+        ctx: Context<ReclaimProposalFunds>,
+        proposal_number: u64,
+    ) -> Result<()> {
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        let clock = Clock::get()?;
+
+        // Validate proposal state
+        require!(!proposal_account.executed, ErrorCode::AlreadyExecuted);
+        require!(clock.unix_timestamp > proposal_account.deadline, ErrorCode::ProposalNotEnded);
+        
+        // Check vote result - can only reclaim if NO >= YES
+        require!(proposal_account.no >= proposal_account.yes, ErrorCode::ProposalPassed);
+
+        // Transfer from escrow back to author
+        let proposal_number_bytes = proposal_number.to_le_bytes();
+        let seeds = &[
+            contexts::PROPOSAL_ESCROW_SEED,
+            proposal_number_bytes.as_ref(),
+            &[ctx.bumps.proposal_escrow],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.proposal_escrow.to_account_info(),
+                    to: ctx.accounts.author_token_account.to_account_info(),
+                    authority: ctx.accounts.proposal_escrow.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            proposal_account.transfer_amount,
+        )?;
+
+        proposal_account.executed = true;
+        proposal_account.is_active = false;
+
+        emit!(ProposalFundsReclaimed {
+            proposal: proposal_account.key(),
+            author: ctx.accounts.author.key(),
+            amount: proposal_account.transfer_amount,
+        });
 
         Ok(())
     }

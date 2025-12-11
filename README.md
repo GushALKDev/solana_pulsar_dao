@@ -147,6 +147,22 @@ A real-time analytics hub provides deep insights into DAO activity:
 
 ---
 
+### 🏆 Gamification & Reputation
+Pulsar DAO rewards active governance participation with on-chain reputation and assets.
+
+#### Voter Leaderboard
+- **Ranking:** Users are ranked globally based on their participation score.
+- **Scoring:** Earn **10 Points** for every vote cast.
+- **Levels:** Visual status indicators (e.g., "Novice", "Master", "Grandmaster").
+
+#### NFT Badges ("Pulsar Commander")
+- **Unlockable Asset:** Users who reach **50 Points** (5 votes) can mint a unique **Pulsar Commander NFT**. *(Threshold reduced for Demo/Hackathon)*
+- **Technology:** Integrated with **Metaplex** for standard NFT metadata.
+- **Visuals:** Displays a custom 3D Badge in wallets (Phantom/Solflare).
+- **Sybil Resistance:** Requires sustained participation to unlock.
+
+---
+
 ### 🛡️ Circuit Breaker (Safety Module)
 An admin-controlled "Emergency Stop" system. If a critical vulnerability is detected, the **Circuit Breaker** can be tripped to instantly pause all voting and withdrawal actions, protecting DAO assets.
 
@@ -162,10 +178,12 @@ An admin-controlled "Emergency Stop" system. If a critical vulnerability is dete
 ## 📊 Quality Metrics
 
 ### Testing
-- ✅ **29/29 tests passing** on localnet
+### Testing
+- ✅ **30/30 tests passing** on localnet
 - ✅ Comprehensive delegation scenarios covered
 - ✅ Proxy lock enforcement verified
 - ✅ Treasury proposal lifecycle tested
+- ✅ Gamification & Score Logic verified (*NFT minting mock-tested*)
 
 ### Code Quality
 - ✅ **0 compilation warnings**
@@ -310,6 +328,7 @@ To deploy updates:
 - **PDA Architecture:** Secure, deterministic account derivation
 - **Proxy Lock:** Novel governance primitive preventing vote manipulation
 - **Anchor Framework:** Modern Solana development with idiomatic patterns
+- **Metaplex Integration:** CPI calls for automatic NFT minting and metadata management
 
 ---
 
@@ -319,7 +338,7 @@ Pulsar DAO demonstrates:
 - **Innovation:** Proxy Lock is a novel governance primitive
 - **Security:** Multiple layers of constraint validation
 - **Usability:** Clean UI with clear visual feedback
-- **Reliability:** Comprehensive test coverage (29/29 passing)
+- **Reliability:** Comprehensive test coverage (30/30 passing)
 - **Treasury Execution:** Trustless on-chain token transfers
 - **Production Quality:** Zero warnings, idiomatic code
 

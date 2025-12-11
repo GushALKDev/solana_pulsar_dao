@@ -10,7 +10,8 @@ import {
   Shield, 
   Settings,
   Bell,
-  Coins
+  Coins,
+  Trophy
 } from 'lucide-react';
 import { PublicKey } from '@solana/web3.js';
 import { program, globalAccountPDAAddress, programId } from '../config';
@@ -127,6 +128,7 @@ const Sidebar = () => {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Lock, label: 'Staking', path: '/staking', badge: 'BOOST' },
     { icon: Shield, label: 'Delegation', path: '/delegation' },
+    { icon: Trophy, label: 'Leaderboard', path: '/leaderboard' },
     { icon: FileText, label: 'Analytics', path: '/analytics' },
   ];
 

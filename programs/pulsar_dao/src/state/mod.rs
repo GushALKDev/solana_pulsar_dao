@@ -66,6 +66,15 @@ pub struct FaucetRecord {
     pub last_request_time: i64,
 }
 
+#[account]
+pub struct UserStats {
+    pub user: Pubkey,
+    pub proposal_count: u64, // Total times voted
+    pub last_vote_time: i64,
+    pub score: u64,          // Points/Score for gamification
+    pub badge_claimed: bool,
+}
+
 ////////////////////////////////////////////////////////////////
 //                          EVENTS
 ////////////////////////////////////////////////////////////////

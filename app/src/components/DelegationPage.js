@@ -150,7 +150,7 @@ const DelegationPage = () => {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 p-8 max-w-7xl mx-auto animate-in fade-in duration-500">
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-4xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-pulsar-primary to-blue-400">

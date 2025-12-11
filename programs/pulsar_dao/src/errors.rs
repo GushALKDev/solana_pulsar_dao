@@ -69,4 +69,10 @@ pub enum ErrorCode {
     InvalidAmount,
     #[msg("Target account is not a treasury proposal.")]
     NotTreasuryProposal,
+
+    // Gamification Errors
+    #[msg("Insufficient score to claim badge.")]
+    InsufficientScore,
+    #[msg("Badge already claimed.")]
+    AlreadyClaimed,
 }

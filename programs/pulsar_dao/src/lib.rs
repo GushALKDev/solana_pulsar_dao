@@ -2,6 +2,9 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Transfer};
+use anchor_spl::metadata::{create_metadata_accounts_v3, CreateMetadataAccountsV3};
+use anchor_spl::metadata::{create_master_edition_v3, CreateMasterEditionV3};
+use anchor_spl::metadata::mpl_token_metadata::types::DataV2;
 
 ////////////////////////////////////////////////////////////////
 //                     MODULE IMPORTS
@@ -210,6 +213,16 @@ pub mod pulsar_dao {
             voter_record.voting_power = total_voting_power;
             voter_record.staked_amount = staked_amount;
         }
+
+        // Update User Stats
+        let user_stats = &mut ctx.accounts.user_stats;
+        if user_stats.proposal_count == 0 {
+            user_stats.user = ctx.accounts.user.key();
+            user_stats.score = 0;
+        }
+        user_stats.proposal_count = user_stats.proposal_count.checked_add(1).unwrap();
+        user_stats.last_vote_time = clock.unix_timestamp;
+        user_stats.score = user_stats.score.checked_add(10).unwrap(); // 10 points per vote
 
         emit!(VoteCast {
             voter: ctx.accounts.user.key(),
@@ -452,6 +465,16 @@ pub mod pulsar_dao {
         voter_record.staked_amount = staked_amount;
         voter_record.voted_by_proxy = true;
 
+        // Update Proxy User Stats (the person doing the work gets the points)
+        let user_stats = &mut ctx.accounts.user_stats;
+        if user_stats.proposal_count == 0 {
+            user_stats.user = ctx.accounts.proxy_authority.key();
+            user_stats.score = 0;
+        }
+        user_stats.proposal_count = user_stats.proposal_count.checked_add(1).unwrap();
+        user_stats.last_vote_time = clock.unix_timestamp;
+        user_stats.score = user_stats.score.checked_add(10).unwrap();
+
         emit!(VoteCast {
             voter: ctx.accounts.delegator_user.key(),
             proposal: proposal_account.key(),
@@ -654,6 +677,112 @@ pub mod pulsar_dao {
             author: ctx.accounts.author.key(),
             amount: proposal_account.transfer_amount,
         });
+
+        Ok(())
+    }
+
+    ////////////////////////////////////////////////////////////////
+    //                 GAMIFICATION INSTRUCTIONS
+    ////////////////////////////////////////////////////////////////
+
+    pub fn claim_badge(ctx: Context<ClaimBadge>) -> Result<()> {
+        // Prepare AccountInfos before mutable borrow of data
+        let user_stats_info = ctx.accounts.user_stats.to_account_info();
+        let badge_mint_info = ctx.accounts.badge_mint.to_account_info();
+        let user_info = ctx.accounts.user.to_account_info();
+        let token_program_info = ctx.accounts.token_program.to_account_info();
+        let metadata_program_info = ctx.accounts.token_metadata_program.to_account_info();
+        let metadata_account_info = ctx.accounts.metadata_account.to_account_info();
+        let master_edition_info = ctx.accounts.master_edition.to_account_info();
+        let system_program_info = ctx.accounts.system_program.to_account_info();
+        let rent_info = ctx.accounts.rent.to_account_info();
+
+        // Prepare seeds
+        let user_key = ctx.accounts.user.key();
+        let bump = ctx.bumps.user_stats;
+        let seeds = &[
+            contexts::USER_STATS_SEED, 
+            user_key.as_ref(),
+            &[bump]
+        ];
+        let signer_seeds = &[&seeds[..]];
+
+        // 1. Validation and State Update
+        {
+            let user_stats = &mut ctx.accounts.user_stats;
+            require!(user_stats.score >= 50, ErrorCode::InsufficientScore);
+            require!(!user_stats.badge_claimed, ErrorCode::AlreadyClaimed);
+            user_stats.badge_claimed = true;
+        }
+
+        // 2. Mint the NFT (Token)
+        token::mint_to(
+            CpiContext::new_with_signer(
+                token_program_info.clone(),
+                token::MintTo {
+                    mint: badge_mint_info.clone(),
+                    to: ctx.accounts.user_badge_token_account.to_account_info(),
+                    authority: user_stats_info.clone(),
+                },
+                signer_seeds
+            ),
+            1,
+        )?;
+
+        // 3. Create Metadata
+        let data_v2 = DataV2 {
+            name: "Pulsar Commander".to_string(),
+            symbol: "PLSR-CMD".to_string(),
+            uri: "https://raw.githubusercontent.com/GushALKDev/solana_voting_app/main/app/public/metadata.json".to_string(),
+            seller_fee_basis_points: 0,
+            creators: None,
+            collection: None,
+            uses: None,
+        };
+
+        let cpi_ctx = CpiContext::new_with_signer(
+            metadata_program_info.clone(),
+            CreateMetadataAccountsV3 {
+                metadata: metadata_account_info.clone(),
+                mint: badge_mint_info.clone(),
+                mint_authority: user_stats_info.clone(),
+                payer: user_info.clone(),
+                update_authority: user_stats_info.clone(),
+                system_program: system_program_info.clone(),
+                rent: rent_info.clone(),
+            },
+            signer_seeds
+        );
+
+        create_metadata_accounts_v3(
+            cpi_ctx,
+            data_v2,
+            true, // Is mutable
+            true, // update authority is signer (pda)
+            None, // Collection details
+        )?;
+
+        // 4. Create Master Edition
+        let cpi_ctx_me = CpiContext::new_with_signer(
+            metadata_program_info.clone(),
+            CreateMasterEditionV3 {
+                edition: master_edition_info,
+                mint: badge_mint_info,
+                update_authority: user_stats_info.clone(),
+                mint_authority: user_stats_info.clone(),
+                payer: user_info,
+                metadata: metadata_account_info,
+                token_program: token_program_info,
+                system_program: system_program_info,
+                rent: rent_info,
+            },
+            signer_seeds
+        );
+        
+        create_master_edition_v3(
+            cpi_ctx_me,
+            Some(0), // Max Supply 0 (Unique)
+        )?;
 
         Ok(())
     }

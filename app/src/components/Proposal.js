@@ -4,7 +4,7 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { CheckCircle, XCircle, ArrowLeft, Clock, Vote, AlertTriangle, Loader2, Users, Lock, Coins, ExternalLink, Play, Undo2 } from 'lucide-react';
-import { program, programId, proposalSeed, globalStateSeed, delegationRecordSeed, delegateProfileSeed, proposalEscrowSeed } from '../config';
+import { program, programId, proposalSeed, globalStateSeed, delegationRecordSeed, delegateProfileSeed, proposalEscrowSeed, userStatsSeed } from '../config';
 import { BN } from 'bn.js';
 
 const STAKE_RECORD_SEED = "stake_record";
@@ -340,6 +340,7 @@ const Proposal = () => {
                         stakeRecord: validStakeRecord,
                         userTokenAccount: userATA,
                         delegationRecord: delegationRecordPDA,
+                        userStats: PublicKey.findProgramAddressSync([Buffer.from(userStatsSeed), publicKey.toBuffer()], programId)[0],
                         user: publicKey,
                     })
                     .instruction();
@@ -387,6 +388,7 @@ const Proposal = () => {
                             delegatorTokenAccount: dATA,
                             delegatorStakeRecord: dStakeRecordPDA, // Account checks handle null inside program if we pass correct address but empty? No, checking exists helps
                             delegatorUser: delegatorPubkey,
+                            userStats: PublicKey.findProgramAddressSync([Buffer.from(userStatsSeed), publicKey.toBuffer()], programId)[0],
                             proxyAuthority: publicKey,
                         })
                         .instruction();

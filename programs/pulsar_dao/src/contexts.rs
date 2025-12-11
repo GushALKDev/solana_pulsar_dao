@@ -6,6 +6,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::metadata::Metadata;
 
 use crate::state::*;
 use crate::errors::ErrorCode;
@@ -15,6 +16,8 @@ pub const PROPOSAL_SEED: &[u8] = b"proposal";
 pub const FAUCET_SEED: &[u8] = b"faucet";
 pub const DELEGATE_PROFILE_SEED: &[u8] = b"delegate_profile";
 pub const DELEGATION_RECORD_SEED: &[u8] = b"delegation_record";
+pub const USER_STATS_SEED: &[u8] = b"user_stats_v2";
+pub const BADGE_MINT_SEED: &[u8] = b"badge";
 
 ////////////////////////////////////////////////////////////////
 //                      ADMIN CONTEXTS
@@ -140,6 +143,15 @@ pub struct VoteProposal<'info> {
         bump
     )]
     pub delegation_record: UncheckedAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = 8 + 32 + 8 + 8 + 8 + 1,
+        seeds = [USER_STATS_SEED, user.key().as_ref()],
+        bump
+    )]
+    pub user_stats: Account<'info, UserStats>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -440,6 +452,15 @@ pub struct VoteAsProxy<'info> {
     /// CHECK: The user who is being voted FOR. They don't sign.
     pub delegator_user: UncheckedAccount<'info>,
 
+    #[account(
+        init_if_needed,
+        payer = proxy_authority,
+        space = 8 + 32 + 8 + 8 + 8 + 1,
+        seeds = [USER_STATS_SEED, proxy_authority.key().as_ref()],
+        bump
+    )]
+    pub user_stats: Account<'info, UserStats>,
+
     #[account(mut)]
     pub proxy_authority: Signer<'info>,
     
@@ -616,5 +637,56 @@ pub struct ReclaimProposalFunds<'info> {
     #[account(mut)]
     pub author: Signer<'info>,
     pub token_program: Program<'info, Token>,
+}
+
+////////////////////////////////////////////////////////////////
+//                   GAMIFICATION CONTEXTS
+////////////////////////////////////////////////////////////////
+
+#[derive(Accounts)]
+pub struct ClaimBadge<'info> {
+    #[account(
+        mut,
+        seeds = [USER_STATS_SEED, user.key().as_ref()],
+        bump,
+        constraint = user_stats.user == user.key()
+    )]
+    pub user_stats: Account<'info, UserStats>,
+
+    #[account(
+        init,
+        payer = user,
+        seeds = [BADGE_MINT_SEED, user.key().as_ref()],
+        bump,
+        mint::decimals = 0,
+        mint::authority = user_stats,
+        mint::freeze_authority = user_stats,
+    )]
+    pub badge_mint: Account<'info, Mint>,
+
+    /// CHECK: Metaplex Metadata Account (Derived from badge_mint)
+    #[account(mut)]
+    pub metadata_account: UncheckedAccount<'info>,
+
+    /// CHECK: Metaplex Master Edition Account
+    #[account(mut)]
+    pub master_edition: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = user,
+        associated_token::mint = badge_mint,
+        associated_token::authority = user
+    )]
+    pub user_badge_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub token_metadata_program: Program<'info, Metadata>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 

@@ -4,9 +4,9 @@ import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 
 import App from './App';
-import './index.css'; // Opcional: estilo general de tu app
+import './index.css';
 
-require('@solana/wallet-adapter-react-ui/styles.css'); // Estilos de los componentes del Wallet Adapter
+require('@solana/wallet-adapter-react-ui/styles.css');
 
 const wallets = [];
 
@@ -22,3 +22,4 @@ ReactDOM.render(
   </React.StrictMode>,
   document.getElementById('root')
 );
+

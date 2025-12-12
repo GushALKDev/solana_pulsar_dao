@@ -60,7 +60,7 @@ const Analytics = () => {
 
                         fetchedProposals.push({
                             name: `Prop #${i}`, // Short name for chart
-                            fullName: account.question,
+                            fullName: account.title ? account.title.toString() : account.description.toString(),
                             yes,
                             no,
                             total,
@@ -110,12 +110,12 @@ const Analytics = () => {
                     <p className="text-3xl font-mono font-bold mt-2 text-pulsar-primary">{stats.totalVotes.toLocaleString()}</p>
                 </div>
                 <div className="bg-card-nebula p-6 rounded-xl border border-white/5">
-                     <p className="text-pulsar-muted text-sm">Active Proposals</p>
-                     <p className="text-3xl font-mono font-bold mt-2 text-white">{stats.activeProposalsCount}</p>
+                    <p className="text-pulsar-muted text-sm">Active Proposals</p>
+                    <p className="text-3xl font-mono font-bold mt-2 text-white">{stats.activeProposalsCount}</p>
                 </div>
                 <div className="bg-card-nebula p-6 rounded-xl border border-white/5">
-                     <p className="text-pulsar-muted text-sm">Ended Proposals</p>
-                     <p className="text-3xl font-mono font-bold mt-2 text-gray-400">{stats.endedProposalsCount}</p>
+                    <p className="text-pulsar-muted text-sm">Ended Proposals</p>
+                    <p className="text-3xl font-mono font-bold mt-2 text-gray-400">{stats.endedProposalsCount}</p>
                 </div>
             </div>
 
@@ -170,26 +170,26 @@ const Analytics = () => {
                     <h3 className="text-xl font-bold">Top Proposals by Engagement</h3>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
+                    <table className="w-full text-center text-sm">
                         <thead className="bg-white/5 text-xs uppercase text-gray-400">
                             <tr>
-                                <th className="px-6 py-4">Proposal</th>
+                                <th className="px-6 py-4 text-left">Proposal</th>
                                 <th className="px-6 py-4">Total Votes</th>
-                                <th className="px-6 py-4 text-center">Status</th>
-                                <th className="px-6 py-4 text-right">% YES</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4">% YES</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5 text-gray-300">
                             {[...proposals].sort((a,b) => b.total - a.total).slice(0, 5).map((p, idx) => (
                                 <tr key={idx} className="hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4 font-medium max-w-xs truncate">{p.fullName}</td>
+                                    <td className="px-6 py-4 font-medium max-w-xs truncate text-left">{p.fullName}</td>
                                     <td className="px-6 py-4 font-mono">{p.total}</td>
-                                    <td className="px-6 py-4 text-center">
+                                    <td className="px-6 py-4">
                                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${p.isActive ? "bg-green-500/20 text-green-400" : "bg-gray-700/50 text-gray-400"}`}>
                                             {p.isActive ? "ACTIVE" : "ENDED"}
                                          </span>
                                     </td>
-                                    <td className="px-6 py-4 text-right font-mono text-pulsar-primary">
+                                    <td className="px-6 py-4 font-mono text-pulsar-primary">
                                         {p.total > 0 ? ((p.yes / p.total) * 100).toFixed(1) : 0}%
                                     </td>
                                 </tr>

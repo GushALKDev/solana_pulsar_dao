@@ -18,7 +18,7 @@ pub use errors::ErrorCode;
 pub use state::*;
 pub use contexts::*;
 
-declare_id!("EiGL8MYPDdcqfJA3vYq798J1G3f77YzwyEWreDqhEFWn");
+declare_id!("EE1i9YyUyjEKxXNzRaup86EkCDyd1bt21e1ecF7rgN9R");
 
 ////////////////////////////////////////////////////////////////
 //                   PROGRAM INSTRUCTIONS
@@ -737,7 +737,7 @@ pub mod pulsar_dao {
         let data_v2 = DataV2 {
             name: "Pulsar Commander".to_string(),
             symbol: "PLSR-CMD".to_string(),
-            uri: "https://raw.githubusercontent.com/GushALKDev/solana_voting_app/main/app/public/metadata.json".to_string(),
+            uri: "https://pulsar-dao.vercel.app/badge.json".to_string(),
             seller_fee_basis_points: 0,
             creators: None,
             collection: None,

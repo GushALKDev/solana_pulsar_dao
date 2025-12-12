@@ -1,0 +1,16 @@
+{
+    "name": "Pulsar Commander",
+    "symbol": "PLSR-CMD",
+    "description": "Exclusive badge for reaching Level 5 in Pulsar DAO governance.",
+    "image": "https://pulsar-dao.vercel.app/badge.png",
+    "attributes": [
+        {
+            "trait_type": "Level",
+            "value": "Commander"
+        },
+        {
+            "trait_type": "DAO",
+            "value": "Pulsar"
+        }
+    ]
+}

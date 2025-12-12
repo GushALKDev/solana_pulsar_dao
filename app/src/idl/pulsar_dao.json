@@ -1876,33 +1876,10 @@
         },
         {
           "name": "delegator_stake_record",
-          "writable": true,
-          "optional": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  116,
-                  97,
-                  107,
-                  101,
-                  95,
-                  114,
-                  101,
-                  99,
-                  111,
-                  114,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "delegator_user"
-              }
-            ]
-          }
+          "docs": [
+            "Optional stake record for delegator (may not exist if never staked)"
+          ],
+          "optional": true
         },
         {
           "name": "delegator_user"

@@ -375,6 +375,10 @@ const Proposal = () => {
                         programId
                     );
                     
+                    // Check if stake record exists on-chain
+                    const stakeRecordInfo = await connection.getAccountInfo(dStakeRecordPDA);
+                    const delegatorStakeRecordAccount = stakeRecordInfo ? dStakeRecordPDA : null;
+                    
                     // Delegator Must Have an ATA for vote to count (Liquid Power)
                     const dATA = await getAssociatedTokenAddress(new PublicKey(tokenMint), delegatorPubkey);
                     
@@ -387,7 +391,7 @@ const Proposal = () => {
                             delegationRecord: dDelegationRecordPDA,
                             voterRecord: dVoterRecordPDA,
                             delegatorTokenAccount: dATA,
-                            delegatorStakeRecord: dStakeRecordPDA, // Account checks handle null inside program if we pass correct address but empty? No, checking exists helps
+                            delegatorStakeRecord: delegatorStakeRecordAccount,
                             delegatorUser: delegatorPubkey,
                             userStats: PublicKey.findProgramAddressSync([Buffer.from(userStatsSeed), publicKey.toBuffer()], programId)[0],
                             proxyAuthority: publicKey,

@@ -442,11 +442,8 @@ pub struct VoteAsProxy<'info> {
     )]
     pub delegator_token_account: Account<'info, TokenAccount>,
 
-    #[account(
-        mut,
-        seeds = [b"stake_record", delegator_user.key().as_ref()],
-        bump,
-    )]
+    /// Optional stake record for delegator (may not exist if never staked)
+    /// CHECK: We verify the seeds manually if Some
     pub delegator_stake_record: Option<Account<'info, VoterStakeRecord>>,
 
     /// CHECK: The user who is being voted FOR. They don't sign.

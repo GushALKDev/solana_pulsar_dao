@@ -194,7 +194,7 @@ describe("Pulsar DAO Comprehensive Test Suite", () => {
       const deadline = new BN(now + 3600); // 1 hour
 
       await program.methods
-        .createProposal("Test Suite Proposal", deadline)
+        .createProposal("Test Suite Proposal", "Description", deadline)
         .accounts({
             globalAccount: globalPDAAddress,
             proposalAccount: proposalPDAAddress,
@@ -402,7 +402,7 @@ describe("Pulsar DAO Comprehensive Test Suite", () => {
       const deadline = new BN(now + 3600); // 1 hour
 
       await program.methods
-        .createProposal("Delegation Test Proposal", deadline)
+        .createProposal("Delegation Test Proposal", "Description", deadline)
         .accounts({
             globalAccount: globalPDAAddress,
             proposalAccount: proposal2PDA,
@@ -634,6 +634,7 @@ describe("Pulsar DAO Comprehensive Test Suite", () => {
     await program.methods
       .createTreasuryProposal(
         "Should we fund the destination?",
+        "Description",
         deadline,
         transferAmount,
         destinationUser.publicKey,
@@ -774,6 +775,7 @@ describe("Pulsar DAO Comprehensive Test Suite", () => {
     await program.methods
       .createTreasuryProposal(
         "Fund destination (will pass)?",
+        "Description",
         deadline,
         transferAmount,
         destinationUser.publicKey,
@@ -882,7 +884,7 @@ describe("Pulsar DAO Comprehensive Test Suite", () => {
         
         const deadline = new BN(Math.floor(Date.now() / 1000) + 3600);
 
-        await program.methods.createProposal(`Gamification Prop ${i}`, deadline)
+        await program.methods.createProposal(`Gamification Prop ${i}`, "Description", deadline)
             .accounts({
                 globalAccount: globalPDAAddress,
                 proposalAccount: pPDA,

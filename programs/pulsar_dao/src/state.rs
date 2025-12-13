@@ -16,18 +16,18 @@ pub struct GlobalAccount {
 pub struct ProposalAccount {
     pub number: u64,
     pub author: Pubkey,
-    pub title: String,       // NEW: Short title for the proposal
-    pub description: String, // Detailed description/body of the proposal
+    pub title: String,                      // NEW: Short title for the proposal
+    pub description: String,                // Detailed description/body of the proposal
     pub yes: u64,
     pub no: u64,
     pub deadline: i64,
     pub is_active: bool,
     // Treasury proposal fields
-    pub proposal_type: u8,                // 0 = Standard, 1 = TreasuryTransfer
-    pub transfer_amount: u64,             // Amount to transfer (0 if Standard)
-    pub transfer_destination: Pubkey,     // Destination wallet (SystemProgram if Standard)
-    pub timelock_seconds: i64,            // Seconds to wait after deadline before execution
-    pub executed: bool,                   // Has been executed?
+    pub proposal_type: u8,                  // 0 = Standard, 1 = TreasuryTransfer
+    pub transfer_amount: u64,               // Amount to transfer (0 if Standard)
+    pub transfer_destination: Pubkey,       // Destination wallet (SystemProgram if Standard)
+    pub timelock_seconds: i64,              // Seconds to wait after deadline before execution
+    pub executed: bool,                     // Has been executed?
 }
 
 #[account]
@@ -70,9 +70,9 @@ pub struct FaucetRecord {
 #[account]
 pub struct UserStats {
     pub user: Pubkey,
-    pub proposal_count: u64, // Total times voted
+    pub proposal_count: u64,                // Total times voted
     pub last_vote_time: i64,
-    pub score: u64,          // Points/Score for gamification
+    pub score: u64,                         // Points/Score for gamification
     pub badge_claimed: bool,
 }
 

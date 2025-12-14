@@ -209,16 +209,65 @@ An admin-controlled "Emergency Stop" system. If a critical vulnerability is dete
 - **Modular Architecture:**
   ```
   programs/pulsar_dao/src/
-  ├── lib.rs          # Instruction handlers
-  ├── errors.rs       # Error codes
-  ├── state/mod.rs    # Account structs & Events
-  └── contexts.rs     # Instruction contexts
+  ├── lib.rs              # Entry point & instruction routing
+  ├── error.rs            # Custom error codes
+  ├── state.rs            # Account structs & Events
+  └── instructions/       # Modular instruction handlers
+      ├── mod.rs          # Module exports
+      ├── admin.rs        # Admin & circuit breaker
+      ├── delegation.rs   # Liquid delegation logic
+      ├── gamification.rs # Leaderboard & NFT minting
+      ├── proposal.rs     # Proposal CRUD operations
+      ├── staking.rs      # Global staking vault
+      ├── treasury.rs     # Treasury proposal execution
+      └── voting.rs       # Hybrid voting mechanics
   ```
 
 ### Frontend (React / Web3)
 - **Styling:** Custom \"Cyberpunk/Neon\" aesthetic using TailwindCSS + `lucide-react` icons.
 - **Interaction:** Uses `@solana/wallet-adapter-react` for seamless wallet connection.
 - **Integration:** Direct RPC communication via automatically generated IDL.
+- **Component Architecture:**
+  ```
+  app/src/
+  ├── App.js              # Main application entry
+  ├── config.js           # Environment configuration
+  ├── index.js            # React DOM bootstrap
+  ├── components/         # UI Components
+  │   ├── Analytics.js    # Dashboard analytics
+  │   ├── CreateProposal.js
+  │   ├── DashboardLayout.js
+  │   ├── DelegationPage.js
+  │   ├── Home.js         # Proposal list view
+  │   ├── Leaderboard.js  # Gamification rankings
+  │   ├── Proposal.js     # Proposal detail & voting
+  │   ├── Sidebar.js      # Navigation
+  │   ├── StakeManager.js # Staking UI
+  │   ├── StakingPage.js
+  │   ├── Star.js         # Decorative component
+  │   └── TokenManager.js # $PULSAR faucet & balance
+  └── idl/                # Auto-generated program IDL
+      └── pulsar_dao.json
+  ```
+
+### Project Structure
+```
+pulsar_dao/
+├── programs/             # Solana smart contracts
+│   └── pulsar_dao/
+├── app/                  # React frontend
+│   ├── src/
+│   └── public/
+├── tests/                # Anchor integration tests
+│   └── pulsar_dao.ts
+├── scripts/              # Utility scripts
+│   └── initialize.js
+├── migrations/           # Anchor migrations
+├── img/                  # Documentation images
+├── Anchor.toml           # Anchor configuration
+├── Cargo.toml            # Rust workspace config
+└── README.md
+```
 
 ### Governance Flow
 1.  **User connects wallet.**

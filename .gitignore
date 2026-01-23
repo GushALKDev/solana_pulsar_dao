@@ -8,3 +8,5 @@ test-ledger
 .vercel
 .env*.local
 presentation.html
+submission.*
+docs

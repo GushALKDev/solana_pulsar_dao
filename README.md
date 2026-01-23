@@ -71,7 +71,7 @@ Your total influence is a dynamic sum of two sources:
 ### 🔐 Global Staking
 - **Unified Stake Record:** A single staking account per user simplifies management.
 - **Time-Lock Multipliers:** Earn more governance power by locking tokens for longer periods.
-    *Note: For testing/hackathon purposes, these are currently set to seconds.*
+    *Note: Timers are accelerated (set to seconds) for Devnet demonstration purposes.*
     - **30 Seconds:** 2x Multiplier (Base)
     - **90 Seconds:** 3x Multiplier
     - **180 Seconds:** 4x Multiplier
@@ -172,14 +172,13 @@ An admin-controlled "Emergency Stop" system. If a critical vulnerability is dete
 
 ### 👮 Admin & Security
 - **Open Access (Testing):** To facilitate community testing, **Proposal Creation is currently OPEN to all users**.
-    - Originally, this was restricted to the DAO Admin, but the constraint has been lifted for the hackathon/demo phase.
+    - Constraint lifted to allow public interaction during Devnet demonstration.
 - **Circuit Breaker:** Admin can pause the entire system in emergencies.
 
 ---
 
 ## 📊 Quality Metrics
 
-### Testing
 ### Testing
 - ✅ **30/30 tests passing** on localnet
 - ✅ Comprehensive delegation scenarios covered
@@ -294,7 +293,7 @@ pulsar_dao/
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/pulsar-dao.git
+    git clone https://github.com/GushALKDev/pulsar-dao.git
     cd pulsar-dao
     ```
 
